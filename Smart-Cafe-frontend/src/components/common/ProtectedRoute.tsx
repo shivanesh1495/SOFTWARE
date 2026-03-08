@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../store/auth.store";
+import { getRoleDashboardPath } from "../../utils/helpers";
 import type { Role } from "../../types";
 
 interface ProtectedRouteProps {
@@ -25,20 +26,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   const userRole = user.role?.toLowerCase() as Role;
 
   if (!allowedRoles.map((r) => r.toLowerCase()).includes(userRole)) {
-    // Redirect to their specific dashboard based on their role
-    // or a 403 Access Denied page. For now, redirect to their role dashboard.
-    switch (userRole) {
-      case "user":
-        return <Navigate to="/user/dashboard" replace />;
-      case "canteen_staff":
-        return <Navigate to="/canteen-staff/dashboard" replace />;
-      case "manager":
-        return <Navigate to="/manager/dashboard" replace />;
-      case "admin":
-        return <Navigate to="/admin/dashboard" replace />;
-      default:
-        return <Navigate to="/auth/login" replace />;
-    }
+    return <Navigate to={getRoleDashboardPath(userRole)} replace />;
   }
 
   return <Outlet />;

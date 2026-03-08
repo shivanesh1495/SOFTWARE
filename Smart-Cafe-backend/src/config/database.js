@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const config = require("./index");
+const logger = require("../utils/logger");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -13,28 +14,28 @@ const connectDB = async () => {
         // Mongoose 6+ has these options enabled by default
       });
 
-      console.log(`MongoDB Connected: ${conn.connection.host}`);
+      logger.info(`MongoDB Connected: ${conn.connection.host}`);
 
       // Handle connection events
       mongoose.connection.on("error", (err) => {
-        console.error("MongoDB connection error:", err);
+        logger.error("MongoDB connection error:", err);
       });
 
       mongoose.connection.on("disconnected", () => {
-        console.log("MongoDB disconnected");
+        logger.warn("MongoDB disconnected");
       });
 
       // Graceful shutdown
       process.on("SIGINT", async () => {
         await mongoose.connection.close();
-        console.log("MongoDB connection closed due to app termination");
+        logger.info("MongoDB connection closed due to app termination");
         process.exit(0);
       });
 
       return conn;
     } catch (error) {
       attempt += 1;
-      console.error(
+      logger.error(
         `Error connecting to MongoDB (attempt ${attempt}): ${error.message}`,
       );
 

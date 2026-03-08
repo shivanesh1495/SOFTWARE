@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getSlots, bookSlot, cancelSlot } from "../booking.service";
+import { getSlots, createBooking, cancelBooking } from "../booking.service";
 
 import api from "../api.config";
 
@@ -41,7 +41,7 @@ describe("Booking Service", () => {
     });
   });
 
-  describe("bookSlot", () => {
+  describe("createBooking", () => {
     it("should book a slot successfully", async () => {
       const mockBooking = { id: "b1", slotId: "slot123" };
       mockedApi.post.mockResolvedValueOnce({
@@ -52,7 +52,7 @@ describe("Booking Service", () => {
         slotId: "slot123",
         items: [{ menuItemId: "item1", quantity: 1 }],
       };
-      const result = await bookSlot(payload as any);
+      const result = await createBooking(payload as any);
 
       expect(mockedApi.post).toHaveBeenCalledWith("/bookings", payload);
       expect(result).toBeDefined();
@@ -64,7 +64,7 @@ describe("Booking Service", () => {
       } as any);
 
       await expect(
-        bookSlot({
+        createBooking({
           slotId: "full-slot",
           items: [{ menuItemId: "item1", quantity: 1 }],
         } as any),
@@ -72,14 +72,14 @@ describe("Booking Service", () => {
     });
   });
 
-  describe("cancelSlot", () => {
+  describe("cancelBooking", () => {
     it("should cancel a booking successfully", async () => {
       const mockBooking = { id: "b1", status: "cancelled" };
       mockedApi.post.mockResolvedValueOnce({
         data: { data: mockBooking },
       } as any);
 
-      const result = await cancelSlot("booking123");
+      const result = await cancelBooking("booking123");
 
       expect(mockedApi.post).toHaveBeenCalledWith(
         "/bookings/booking123/cancel",
@@ -93,7 +93,7 @@ describe("Booking Service", () => {
     it("should handle cancel errors", async () => {
       mockedApi.post.mockRejectedValueOnce(new Error("Cancel failed"));
 
-      await expect(cancelSlot("invalid-booking")).rejects.toThrow(
+      await expect(cancelBooking("invalid-booking")).rejects.toThrow(
         "Cancel failed",
       );
     });

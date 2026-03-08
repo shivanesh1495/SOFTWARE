@@ -1,13 +1,14 @@
 // API Configuration - Unified Backend
 export const API_CONFIG = {
   // Main Backend (Node.js) - All API calls go here
-  BASE_URL: "http://localhost:3000/api",
+  BASE_URL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
 
   // Alias for backward compatibility
-  MAIN_BACKEND_URL: "http://localhost:3000/api",
+  MAIN_BACKEND_URL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
 
   // Python Forecasting API (ML predictions)
-  FORECAST_API_URL: "http://localhost:5001",
+  FORECAST_API_URL:
+    import.meta.env.VITE_FORECAST_API_URL || "http://localhost:5001",
 };
 
 // Create axios instance with default config
@@ -39,7 +40,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expired or invalid
       localStorage.removeItem("token");
-      window.location.href = "/login";
+      window.location.href = "/auth/login";
     }
     // Allow 429 (Too Many Requests) to pass through with data
     // The AI service will return a proper error message in the response

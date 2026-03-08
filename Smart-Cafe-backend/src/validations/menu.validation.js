@@ -6,12 +6,7 @@ const {
   PORTION_SIZES,
   DIETARY_TYPES,
 } = require("../models/MenuItem");
-
-const objectId = Joi.string()
-  .regex(/^[0-9a-fA-F]{24}$/)
-  .messages({
-    "string.pattern.base": "Invalid ID format",
-  });
+const { objectId } = require("./common");
 
 // Menu validations
 const createMenu = Joi.object({

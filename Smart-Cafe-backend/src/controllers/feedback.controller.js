@@ -1,84 +1,68 @@
-const Feedback = require("../models/Feedback");
-const aiSentimentService = require("../services/aiSentiment.service");
+const { Feedback } = require("../models");
+const { aiSentimentService } = require("../services");
+const catchAsync = require("../utils/catchAsync");
+const ApiResponse = require("../utils/ApiResponse");
+const ApiError = require("../utils/ApiError");
 
 // @desc    Submit feedback with AI analysis
 // @route   POST /api/feedback
 // @access  Private (User/Student)
-exports.submitFeedback = async (req, res) => {
-  try {
-    const { bookingId, rating, comment } = req.body;
+const submitFeedback = catchAsync(async (req, res) => {
+  const { bookingId, rating, comment } = req.body;
 
-    if (!rating || !comment) {
-      return res.status(400).json({
-        success: false,
-        message: "Rating and comment are required",
-      });
-    }
-
-    // Call Gemini for Sentiment Analysis
-    const aiAnalysis = await aiSentimentService.analyzeSentiment(comment, rating);
-
-    const feedback = await Feedback.create({
-      user: req.user.id,
-      booking: bookingId || null,
-      rating,
-      comment,
-      aiSentimentScore: aiAnalysis.sentimentScore,
-      aiSentimentTag: aiAnalysis.sentimentTag,
-      aiTopics: aiAnalysis.topics,
-    });
-
-    res.status(201).json({
-      success: true,
-      data: feedback,
-    });
-  } catch (error) {
-    console.error("Submit Feedback Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server Error processing feedback",
-    });
+  if (!rating || !comment) {
+    throw ApiError.badRequest("Rating and comment are required");
   }
-};
+
+  // Call Gemini for Sentiment Analysis
+  const aiAnalysis = await aiSentimentService.analyzeSentiment(comment, rating);
+
+  const feedback = await Feedback.create({
+    user: req.user.id,
+    booking: bookingId || null,
+    rating,
+    comment,
+    aiSentimentScore: aiAnalysis.sentimentScore,
+    aiSentimentTag: aiAnalysis.sentimentTag,
+    aiTopics: aiAnalysis.topics,
+  });
+
+  ApiResponse.created(res, "Feedback submitted successfully", feedback);
+});
 
 // @desc    Get all feedback with filtering
 // @route   GET /api/feedback
 // @access  Private/Admin/Manager
-exports.getFeedback = async (req, res) => {
-  try {
-    const { sentimentTag, rating, limit = 50 } = req.query;
-    
-    let query = {};
-    if (sentimentTag) query.aiSentimentTag = sentimentTag;
-    if (rating) query.rating = Number(rating);
+const getFeedback = catchAsync(async (req, res) => {
+  const { sentimentTag, rating, limit = 50 } = req.query;
 
-    const feedbackList = await Feedback.find(query)
-      .populate("user", "name email")
-      .populate("booking", "tokenNumber items")
-      .sort({ createdAt: -1 })
-      .limit(Number(limit));
+  const query = {};
+  if (sentimentTag) query.aiSentimentTag = sentimentTag;
+  if (rating) query.rating = Number(rating);
 
-    // Calculate quick stats
-    const total = await Feedback.countDocuments(query);
-    const positiveCount = await Feedback.countDocuments({ ...query, aiSentimentTag: "Positive" });
-    const negativeCount = await Feedback.countDocuments({ ...query, aiSentimentTag: "Negative" });
-    const neutralCount = await Feedback.countDocuments({ ...query, aiSentimentTag: "Neutral" });
+  const feedbackList = await Feedback.find(query)
+    .populate("user", "name email")
+    .populate("booking", "tokenNumber items")
+    .sort({ createdAt: -1 })
+    .limit(Number(limit));
 
-    res.status(200).json({
-      success: true,
-      stats: {
-        total,
-        positiveCount,
-        negativeCount,
-        neutralCount
-      },
-      data: feedbackList,
-    });
-  } catch (error) {
-    console.error("Get Feedback Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server Error fetching feedback",
-    });
-  }
+  // Calculate quick stats
+  const [total, positiveCount, negativeCount, neutralCount] = await Promise.all(
+    [
+      Feedback.countDocuments(query),
+      Feedback.countDocuments({ ...query, aiSentimentTag: "Positive" }),
+      Feedback.countDocuments({ ...query, aiSentimentTag: "Negative" }),
+      Feedback.countDocuments({ ...query, aiSentimentTag: "Neutral" }),
+    ],
+  );
+
+  ApiResponse.ok(res, "Feedback retrieved", {
+    stats: { total, positiveCount, negativeCount, neutralCount },
+    feedbackList,
+  });
+});
+
+module.exports = {
+  submitFeedback,
+  getFeedback,
 };

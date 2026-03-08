@@ -15,9 +15,21 @@ module.exports = {
   },
 
   jwt: {
-    secret: process.env.JWT_SECRET || "default-secret-change-in-production",
+    secret:
+      process.env.JWT_SECRET ||
+      (process.env.NODE_ENV === "production"
+        ? (() => {
+            throw new Error("JWT_SECRET must be set in production");
+          })()
+        : "dev-secret-not-for-production"),
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
-    refreshSecret: process.env.JWT_REFRESH_SECRET || "default-refresh-secret",
+    refreshSecret:
+      process.env.JWT_REFRESH_SECRET ||
+      (process.env.NODE_ENV === "production"
+        ? (() => {
+            throw new Error("JWT_REFRESH_SECRET must be set in production");
+          })()
+        : "dev-refresh-secret-not-for-production"),
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   },
 

@@ -1,4 +1,10 @@
-export type Role = 'user' | 'canteen_staff' | 'manager' | 'admin';
+export type Role =
+  | "user"
+  | "canteen_staff"
+  | "kitchen_staff"
+  | "counter_staff"
+  | "manager"
+  | "admin";
 
 export interface User {
   id: string;
@@ -7,23 +13,16 @@ export interface User {
   email: string;
   role: Role;
   avatar?: string;
+  status?: "active" | "suspended";
+  isOnline?: boolean;
+  canteenId?: string;
+  segment?: "student" | "faculty" | "guest" | "vip";
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-}
-
-export interface MenuItem {
-  id: number;
-  name: string;
-  price: number;
-  mealType: 'Breakfast' | 'Lunch' | 'Snacks';
-  dietaryType: 'Veg' | 'Non-Veg' | 'Vegan' | 'Jain';
-  allergens: string[];
-  ecoScore: 'A' | 'B' | 'C' | 'D' | 'E';
-  portionSize: 'Small' | 'Regular';
-  isAvailable: boolean;
-  canteen?: string;
 }

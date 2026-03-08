@@ -4,10 +4,9 @@ const {
   aiNutritionService,
   aiRecommendationService,
   aiChatService,
-  aiInventoryService,
-  aiQueueService,
 } = require("../services");
 const { checkRateLimit } = require("../utils/rateLimiter");
+const logger = require("../utils/logger");
 
 const getNutrition = catchAsync(async (req, res) => {
   const userId = req.user._id;
@@ -66,7 +65,7 @@ const chat = catchAsync(async (req, res) => {
   // Check rate limit
   const rateLimitCheck = checkRateLimit(userId.toString(), "chat");
   if (!rateLimitCheck.allowed) {
-    console.warn(
+    logger.warn(
       `Chat rate limited for user ${userId.toString()}: ${rateLimitCheck.retryAfterSeconds}s wait`,
     );
     return ApiResponse.tooManyRequests(
@@ -81,28 +80,6 @@ const chat = catchAsync(async (req, res) => {
 
   const result = await aiChatService.chat(messages, userId);
   ApiResponse.ok(res, "Chat response fetched", result);
-});
-
-const getInventoryInsights = catchAsync(async (req, res) => {
-  const userId = req.user._id;
-  const userRole = req.user.role;
-
-  const result = await aiInventoryService.getInventoryInsights(
-    userId,
-    userRole,
-  );
-  ApiResponse.ok(res, "Inventory insights fetched", result);
-});
-
-const predictWaitTime = catchAsync(async (req, res) => {
-  const { canteenId } = req.params;
-  const { queueLength } = req.query;
-
-  const result = await aiQueueService.predictWaitTime(
-    canteenId,
-    queueLength || 0,
-  );
-  ApiResponse.ok(res, "Wait time predicted", result);
 });
 
 const getDietRecommendations = catchAsync(async (req, res) => {
@@ -131,6 +108,4 @@ module.exports = {
   getRecommendations,
   chat,
   getDietRecommendations,
-  getInventoryInsights,
-  predictWaitTime,
 };

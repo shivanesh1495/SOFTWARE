@@ -5,9 +5,11 @@ import { AuthProvider } from "./store/auth.store";
 import { CartProvider } from "./store/cart.store";
 import Layout from "./layout";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 import LoginPage from "./auth/login/page";
 import SignUpPage from "./auth/signup/page";
 import Loader from "./components/common/Loader";
+import NotFoundPage from "./components/common/NotFoundPage";
 
 const ForgotPasswordPage = React.lazy(
   () => import("./auth/forgot-password/page"),
@@ -67,110 +69,122 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <Suspense
-            fallback={
-              <div className="h-screen flex items-center justify-center">
-                <Loader />
-              </div>
-            }
-          >
-            <Toaster position="top-right" />
-            <Routes>
-              <Route path="/auth/login" element={<LoginPage />} />
-              <Route path="/auth/signup" element={<SignUpPage />} />
-              <Route
-                path="/auth/forgot-password"
-                element={<ForgotPasswordPage />}
-              />
-              <Route path="/auth/verify-otp" element={<VerifyOtpPage />} />
-              <Route
-                path="/auth/reset-password"
-                element={<ResetPasswordPage />}
-              />
-
-              <Route element={<Layout />}>
-                {/* User Routes */}
-                <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
-                  <Route path="/user/dashboard" element={<UserDashboard />} />
-                  <Route path="/user/booking" element={<UserBooking />} />
-                  <Route path="/user/queue" element={<UserQueue />} />
-                  <Route
-                    path="/user/notifications"
-                    element={<UserNotifications />}
-                  />
-
-                  <Route
-                    path="/user/sustainability"
-                    element={<UserSustainability />}
-                  />
-                  <Route path="/user/canteens" element={<UserCanteens />} />
-                  <Route path="/user/item/:id" element={<UserItemDetail />} />
-                  <Route path="/user/cart" element={<UserCart />} />
-                  <Route path="/user/slots" element={<UserSlots />} />
-                  <Route path="/user/token" element={<UserToken />} />
-                  <Route path="/user/tokens" element={<UserTokens />} />
-                </Route>
-
-                {/* Canteen Staff Routes */}
+          <ErrorBoundary>
+            <Suspense
+              fallback={
+                <div className="h-screen flex items-center justify-center">
+                  <Loader />
+                </div>
+              }
+            >
+              <Toaster position="top-right" />
+              <Routes>
+                <Route path="/auth/login" element={<LoginPage />} />
+                <Route path="/auth/signup" element={<SignUpPage />} />
                 <Route
-                  element={<ProtectedRoute allowedRoles={["canteen_staff"]} />}
-                >
+                  path="/auth/forgot-password"
+                  element={<ForgotPasswordPage />}
+                />
+                <Route path="/auth/verify-otp" element={<VerifyOtpPage />} />
+                <Route
+                  path="/auth/reset-password"
+                  element={<ResetPasswordPage />}
+                />
+
+                <Route element={<Layout />}>
+                  {/* User Routes */}
+                  <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
+                    <Route path="/user/dashboard" element={<UserDashboard />} />
+                    <Route path="/user/booking" element={<UserBooking />} />
+                    <Route path="/user/queue" element={<UserQueue />} />
+                    <Route
+                      path="/user/notifications"
+                      element={<UserNotifications />}
+                    />
+
+                    <Route
+                      path="/user/sustainability"
+                      element={<UserSustainability />}
+                    />
+                    <Route path="/user/canteens" element={<UserCanteens />} />
+                    <Route path="/user/item/:id" element={<UserItemDetail />} />
+                    <Route path="/user/cart" element={<UserCart />} />
+                    <Route path="/user/slots" element={<UserSlots />} />
+                    <Route path="/user/token" element={<UserToken />} />
+                    <Route path="/user/tokens" element={<UserTokens />} />
+                  </Route>
+
+                  {/* Canteen Staff Routes */}
                   <Route
-                    path="/canteen-staff/dashboard"
-                    element={<CanteenStaffDashboard />}
-                  />
+                    element={
+                      <ProtectedRoute allowedRoles={["canteen_staff"]} />
+                    }
+                  >
+                    <Route
+                      path="/canteen-staff/dashboard"
+                      element={<CanteenStaffDashboard />}
+                    />
+                    <Route
+                      path="/canteen-staff/scan-token"
+                      element={<CanteenStaffScanToken />}
+                    />
+                    <Route
+                      path="/canteen-staff/scans"
+                      element={<CanteenStaffScans />}
+                    />
+                    <Route
+                      path="/canteen-staff/walkin"
+                      element={<CanteenStaffWalkin />}
+                    />
+                    <Route
+                      path="/canteen-staff/announcements"
+                      element={<CanteenStaffAnnouncements />}
+                    />
+                  </Route>
+
+                  {/* Manager Routes */}
                   <Route
-                    path="/canteen-staff/scan-token"
-                    element={<CanteenStaffScanToken />}
-                  />
-                  <Route
-                    path="/canteen-staff/scans"
-                    element={<CanteenStaffScans />}
-                  />
-                  <Route
-                    path="/canteen-staff/walkin"
-                    element={<CanteenStaffWalkin />}
-                  />
-                  <Route
-                    path="/canteen-staff/announcements"
-                    element={<CanteenStaffAnnouncements />}
-                  />
+                    element={<ProtectedRoute allowedRoles={["manager"]} />}
+                  >
+                    <Route
+                      path="/manager/dashboard"
+                      element={<ManagerDashboard />}
+                    />
+                    <Route
+                      path="/manager/forecasts"
+                      element={<ManagerForecasts />}
+                    />
+                  </Route>
+
+                  {/* Admin Routes */}
+                  <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+                    <Route
+                      path="/admin/dashboard"
+                      element={<AdminDashboard />}
+                    />
+                    <Route path="/admin/menu" element={<AdminMenu />} />
+                    <Route path="/admin/bookings" element={<AdminBookings />} />
+                    <Route path="/admin/roles" element={<AdminRoles />} />
+                    <Route path="/admin/timings" element={<AdminTimings />} />
+                    <Route path="/admin/capacity" element={<AdminCapacity />} />
+                    <Route path="/admin/system" element={<AdminSystem />} />
+                    <Route path="/admin/settings" element={<AdminSettings />} />
+                    <Route path="/admin/canteens" element={<AdminCanteens />} />
+                    <Route
+                      path="/admin/notifications"
+                      element={<AdminNotifications />}
+                    />
+                  </Route>
                 </Route>
 
-                {/* Manager Routes */}
-                <Route element={<ProtectedRoute allowedRoles={["manager"]} />}>
-                  <Route
-                    path="/manager/dashboard"
-                    element={<ManagerDashboard />}
-                  />
-                  <Route
-                    path="/manager/forecasts"
-                    element={<ManagerForecasts />}
-                  />
-                </Route>
-
-                {/* Admin Routes */}
-                <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  <Route path="/admin/menu" element={<AdminMenu />} />
-                  <Route path="/admin/bookings" element={<AdminBookings />} />
-                  <Route path="/admin/roles" element={<AdminRoles />} />
-                  <Route path="/admin/timings" element={<AdminTimings />} />
-                  <Route path="/admin/capacity" element={<AdminCapacity />} />
-                  <Route path="/admin/system" element={<AdminSystem />} />
-                  <Route path="/admin/settings" element={<AdminSettings />} />
-                  <Route path="/admin/canteens" element={<AdminCanteens />} />
-                  <Route
-                    path="/admin/notifications"
-                    element={<AdminNotifications />}
-                  />
-                </Route>
-              </Route>
-
-              <Route path="/" element={<Navigate to="/auth/login" replace />} />
-              <Route path="*" element={<Navigate to="/auth/login" replace />} />
-            </Routes>
-          </Suspense>
+                <Route
+                  path="/"
+                  element={<Navigate to="/auth/login" replace />}
+                />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </CartProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -1,7 +1,8 @@
-const sustainabilityService = require("../services/sustainability.service");
+const { sustainabilityService } = require("../services");
 const catchAsync = require("../utils/catchAsync");
 const ApiResponse = require("../utils/ApiResponse");
 const { emitToAll } = require("../utils/socketEmitter");
+const logger = require("../utils/logger");
 
 /**
  * Submit waste report
@@ -16,7 +17,7 @@ const submitWasteReport = catchAsync(async (req, res) => {
   // Refresh eco-scores in the background after a new report
   sustainabilityService
     .refreshEcoScores()
-    .catch((err) => console.error("Eco-score refresh error:", err.message));
+    .catch((err) => logger.error("Eco-score refresh error:", err.message));
 
   // Broadcast so manager dashboard waste control updates in real-time
   emitToAll("sustainability:updated", { action: "waste-report", report });

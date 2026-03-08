@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../store/auth.store";
 import Button from "../../components/common/Button";
 import { AlertCircle, Coffee, Eye, EyeOff } from "lucide-react";
+import { getRoleDashboardPath } from "../../utils/helpers";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -17,13 +18,7 @@ const LoginPage: React.FC = () => {
   React.useEffect(() => {
     if (isAuthenticated && user && user.role && !hasRedirected.current) {
       hasRedirected.current = true;
-      const role = user.role.toLowerCase();
-      if (role === "user") navigate("/user/dashboard");
-      else if (role === "canteen_staff" || role === "canteenstaff")
-        navigate("/canteen-staff/dashboard");
-      else if (role === "manager") navigate("/manager/dashboard");
-      else if (role === "admin") navigate("/admin/dashboard");
-      else navigate("/");
+      navigate(getRoleDashboardPath(user.role));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
@@ -41,26 +36,7 @@ const LoginPage: React.FC = () => {
       const user = await login(email, password);
 
       if (user) {
-        const role = user.role?.toLowerCase();
-        switch (role) {
-          case "user":
-            navigate("/user/dashboard");
-            break;
-          case "canteen_staff":
-          case "canteenstaff":
-            navigate("/canteen-staff/dashboard");
-            break;
-          case "manager":
-            navigate("/manager/dashboard");
-            break;
-          case "admin":
-            navigate("/admin/dashboard");
-            break;
-          default:
-            navigate("/");
-        }
-      } else {
-        navigate("/");
+        navigate(getRoleDashboardPath(user.role));
       }
     } catch (err) {
       setError("Invalid credentials");

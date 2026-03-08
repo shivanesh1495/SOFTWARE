@@ -326,11 +326,6 @@ export const getBookingStats = async (params?: {
   return response.data.data;
 };
 
-// Legacy exports for backward compatibility
-export const getSlots_legacy = getTodaySlots;
-export const bookSlot = createBooking;
-export const cancelSlot = cancelBooking;
-
 /**
  * Queue info response from backend
  */
@@ -368,7 +363,9 @@ export interface TokenStatus {
 /**
  * Get token status with reason
  */
-export const getTokenStatus = async (tokenNumber: string): Promise<TokenStatus> => {
+export const getTokenStatus = async (
+  tokenNumber: string,
+): Promise<TokenStatus> => {
   const response = await api.get(`/bookings/token-status/${tokenNumber}`);
   return response.data.data;
 };
@@ -378,9 +375,10 @@ export const getTokenStatus = async (tokenNumber: string): Promise<TokenStatus> 
  */
 export const rescheduleBooking = async (
   bookingId: string,
-  newSlotId: string
+  newSlotId: string,
 ): Promise<Booking> => {
-  const response = await api.put(`/bookings/${bookingId}/reschedule`, { newSlotId });
+  const response = await api.put(`/bookings/${bookingId}/reschedule`, {
+    newSlotId,
+  });
   return normalizeBooking(response.data.data);
 };
-

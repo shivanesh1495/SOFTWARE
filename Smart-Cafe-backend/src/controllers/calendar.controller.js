@@ -1,60 +1,38 @@
-const calendarService = require('../services/calendar.service');
+const { calendarService } = require("../services");
+const catchAsync = require("../utils/catchAsync");
+const ApiResponse = require("../utils/ApiResponse");
 
-const createEvent = async (req, res, next) => {
-  try {
-    const event = await calendarService.createEvent(req.body, req.user._id);
-    res.status(201).json({ success: true, data: event });
-  } catch (error) {
-    next(error);
-  }
-};
+const createEvent = catchAsync(async (req, res) => {
+  const event = await calendarService.createEvent(req.body, req.user._id);
+  ApiResponse.created(res, "Event created", event);
+});
 
-const getAllEvents = async (req, res, next) => {
-  try {
-    const events = await calendarService.getAllEvents(req.query);
-    res.json({ success: true, data: events });
-  } catch (error) {
-    next(error);
-  }
-};
+const getAllEvents = catchAsync(async (req, res) => {
+  const events = await calendarService.getAllEvents(req.query);
+  ApiResponse.ok(res, "Events retrieved", events);
+});
 
-const getActiveEvents = async (req, res, next) => {
-  try {
-    const events = await calendarService.getActiveEvents(req.query.date);
-    res.json({ success: true, data: events });
-  } catch (error) {
-    next(error);
-  }
-};
+const getActiveEvents = catchAsync(async (req, res) => {
+  const events = await calendarService.getActiveEvents(req.query.date);
+  ApiResponse.ok(res, "Active events retrieved", events);
+});
 
-const getDemandAdjustment = async (req, res, next) => {
-  try {
-    const adjustment = await calendarService.getEventDemandAdjustment(
-      req.query.date || new Date()
-    );
-    res.json({ success: true, data: adjustment });
-  } catch (error) {
-    next(error);
-  }
-};
+const getDemandAdjustment = catchAsync(async (req, res) => {
+  const adjustment = await calendarService.getEventDemandAdjustment(
+    req.query.date || new Date(),
+  );
+  ApiResponse.ok(res, "Demand adjustment retrieved", adjustment);
+});
 
-const updateEvent = async (req, res, next) => {
-  try {
-    const event = await calendarService.updateEvent(req.params.id, req.body);
-    res.json({ success: true, data: event });
-  } catch (error) {
-    next(error);
-  }
-};
+const updateEvent = catchAsync(async (req, res) => {
+  const event = await calendarService.updateEvent(req.params.id, req.body);
+  ApiResponse.ok(res, "Event updated", event);
+});
 
-const deleteEvent = async (req, res, next) => {
-  try {
-    await calendarService.deleteEvent(req.params.id);
-    res.json({ success: true, message: 'Event deleted' });
-  } catch (error) {
-    next(error);
-  }
-};
+const deleteEvent = catchAsync(async (req, res) => {
+  await calendarService.deleteEvent(req.params.id);
+  ApiResponse.ok(res, "Event deleted");
+});
 
 module.exports = {
   createEvent,

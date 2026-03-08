@@ -148,6 +148,3 @@ export const toggleMenuItemAvailability = async (
   const response = await api.patch(`/menu-items/${itemId}/toggle`);
   return response.data.data;
 };
-
-// Legacy alias
-export const getMenuList = getMenus;

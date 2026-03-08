@@ -12,6 +12,10 @@ const canteenController = require("./canteen.controller");
 const staffController = require("./staff.controller");
 const aiController = require("./ai.controller");
 const feedbackController = require("./feedback.controller");
+const forecastController = require("./forecast.controller");
+const holidayController = require("./holiday.controller");
+const calendarController = require("./calendar.controller");
+const sustainabilityController = require("./sustainability.controller");
 
 module.exports = {
   authController,
@@ -28,4 +32,8 @@ module.exports = {
   staffController,
   aiController,
   feedbackController,
+  forecastController,
+  holidayController,
+  calendarController,
+  sustainabilityController,
 };

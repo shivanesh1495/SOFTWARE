@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const logger = require("../utils/logger");
 
 // Setup Gemini API
 const apiKey = process.env.GEMINI_API_KEY;
@@ -19,10 +20,11 @@ if (apiKey) {
  */
 exports.analyzeSentiment = async (comment, rating) => {
   if (!model) {
-    console.warn("GEMINI_API_KEY not found. Skipping sentiment analysis.");
+    logger.warn("GEMINI_API_KEY not found. Skipping sentiment analysis.");
     return {
       sentimentScore: 0,
-      sentimentTag: rating >= 4 ? "Positive" : rating <= 2 ? "Negative" : "Neutral",
+      sentimentTag:
+        rating >= 4 ? "Positive" : rating <= 2 ? "Negative" : "Neutral",
       topics: [],
     };
   }
@@ -52,28 +54,34 @@ Example format:
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-    
+
     // Clean potential markdown blocks
     const cleanedText = text.replace(/```json\n|\n```|```/g, "").trim();
-    
+
     const parsedData = JSON.parse(cleanedText);
-    
+
     // Validate output
-    if (!["Positive", "Neutral", "Negative"].includes(parsedData.sentimentTag)) {
-        parsedData.sentimentTag = "Neutral";
+    if (
+      !["Positive", "Neutral", "Negative"].includes(parsedData.sentimentTag)
+    ) {
+      parsedData.sentimentTag = "Neutral";
     }
 
     return {
-      sentimentScore: typeof parsedData.sentimentScore === 'number' ? parsedData.sentimentScore : 0,
+      sentimentScore:
+        typeof parsedData.sentimentScore === "number"
+          ? parsedData.sentimentScore
+          : 0,
       sentimentTag: parsedData.sentimentTag,
       topics: Array.isArray(parsedData.topics) ? parsedData.topics : [],
     };
   } catch (error) {
-    console.error("AI Sentiment Analysis Error:", error);
+    logger.error("AI Sentiment Analysis Error:", error);
     // Fallback logic in case of API failure
     return {
       sentimentScore: 0,
-      sentimentTag: rating >= 4 ? "Positive" : rating <= 2 ? "Negative" : "Neutral",
+      sentimentTag:
+        rating >= 4 ? "Positive" : rating <= 2 ? "Negative" : "Neutral",
       topics: [],
     };
   }
