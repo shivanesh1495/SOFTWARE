@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "C:\\Users\\SHIVAN~1\\AppData\\Local\\Programs\\Python\\PYTHON~1\\python.exe",
+  "python.analysis.extraPaths": [
+    "C:\\Users\\SHIVAN~1\\AppData\\Local\\Programs\\Python\\PYTHON~1\\Lib\\site-packages"
+  ],
+  "pyre.enable": false
+}

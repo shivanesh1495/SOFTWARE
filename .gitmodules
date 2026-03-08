@@ -1,0 +1,6 @@
+[submodule "Smart-Cafe-backend"]
+	path = Smart-Cafe-backend
+	url = https://github.com/SE7-SOFTWAREENGINEERING/Smart-Cafe-backend.git
+[submodule "Smart-Cafe-frontend"]
+	path = Smart-Cafe-frontend
+	url = https://github.com/SE7-SOFTWAREENGINEERING/Smart-Cafe-frontend.git
