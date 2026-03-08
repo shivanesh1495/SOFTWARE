@@ -61,9 +61,6 @@ const AdminCanteens = React.lazy(() => import("./admin/canteens/page"));
 const AdminNotifications = React.lazy(
   () => import("./admin/notifications/page"),
 );
-const AdminFeedback = React.lazy(
-  () => import("./admin/feedback/page"),
-);
 
 function App() {
   return (
@@ -166,10 +163,6 @@ function App() {
                   <Route
                     path="/admin/notifications"
                     element={<AdminNotifications />}
-                  />
-                  <Route
-                    path="/admin/feedback"
-                    element={<AdminFeedback />}
                   />
                 </Route>
               </Route>

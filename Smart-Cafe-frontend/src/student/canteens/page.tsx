@@ -3,30 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { MapPin, Users, ChevronRight, Info, Loader2 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import * as canteenService from "../../services/canteen.service";
-import type { Canteen } from "../../services/canteen.service";
-
-const IMAGE_COLORS = [
-  "bg-orange-100",
-  "bg-green-100",
-  "bg-blue-100",
-  "bg-purple-100",
-  "bg-red-100",
-];
+import type { Canteen, CanteenConfig } from "../../services/canteen.service";
 
 const CanteenSelection: React.FC = () => {
   const navigate = useNavigate();
   const [canteens, setCanteens] = useState<Canteen[]>([]);
+  const [config, setConfig] = useState<CanteenConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadCanteens();
+    loadData();
   }, []);
 
-  const loadCanteens = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await canteenService.getCanteens({ isActive: true });
-      setCanteens(data);
+      const [canteenData, configData] = await Promise.all([
+        canteenService.getCanteens({ isActive: true }),
+        canteenService.getCanteenConfig(),
+      ]);
+      setCanteens(canteenData);
+      setConfig(configData);
     } catch (error) {
       console.error("Failed to load canteens:", error);
     } finally {
@@ -40,16 +37,34 @@ const CanteenSelection: React.FC = () => {
   };
 
   const getCrowdColor = (level: string) => {
-    switch (level) {
-      case "Low":
-        return "text-green-600 bg-green-50";
-      case "Medium":
-        return "text-amber-600 bg-amber-50";
-      case "High":
-        return "text-red-600 bg-red-50";
-      default:
-        return "text-gray-600 bg-gray-50";
-    }
+    // Dynamic: crowd levels come from config, styling by position
+    if (!config) return "text-gray-600 bg-gray-50";
+    const idx = config.crowdLevels.indexOf(level);
+    const colors = [
+      "text-green-600 bg-green-50",
+      "text-amber-600 bg-amber-50",
+      "text-red-600 bg-red-50",
+    ];
+    return colors[idx] ?? "text-gray-600 bg-gray-50";
+  };
+
+  const getStatusColor = (status: string) => {
+    if (!config) return "bg-gray-100 text-gray-500";
+    const idx = config.statuses.indexOf(status);
+    const colors = [
+      "bg-green-100 text-green-700",
+      "bg-gray-100 text-gray-500",
+      "bg-amber-100 text-amber-700",
+    ];
+    return colors[idx] ?? "bg-gray-100 text-gray-500";
+  };
+
+  const getAvatarColor = (canteen: Canteen, index: number) => {
+    if (canteen.imageColor) return canteen.imageColor;
+    const colorOptions = config?.colorOptions || [];
+    return colorOptions.length > 0
+      ? colorOptions[index % colorOptions.length].value
+      : "bg-orange-100";
   };
 
   return (
@@ -84,8 +99,7 @@ const CanteenSelection: React.FC = () => {
                 <div
                   className={cn(
                     "w-20 h-20 rounded-xl flex items-center justify-center flex-shrink-0 text-gray-500 font-bold text-xl",
-                    canteen.imageColor ||
-                      IMAGE_COLORS[index % IMAGE_COLORS.length],
+                    getAvatarColor(canteen, index),
                   )}
                 >
                   {canteen.name[0]}
@@ -99,11 +113,7 @@ const CanteenSelection: React.FC = () => {
                     <span
                       className={cn(
                         "text-xs font-bold px-2 py-1 rounded-full",
-                        canteen.status === "Open"
-                          ? "bg-green-100 text-green-700"
-                          : canteen.status === "Closed"
-                            ? "bg-gray-100 text-gray-500"
-                            : "bg-amber-100 text-amber-700",
+                        getStatusColor(canteen.status),
                       )}
                     >
                       {canteen.status}

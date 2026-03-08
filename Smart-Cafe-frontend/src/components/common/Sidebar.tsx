@@ -15,7 +15,6 @@ import {
   Settings,
   Database,
   Store,
-  MessageSquare,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 
@@ -88,7 +87,6 @@ const Sidebar: React.FC = () => {
             icon: Settings,
           },
           { to: "/admin/system", label: "System Maintenance", icon: Database },
-          { to: "/admin/feedback", label: "Feedback Analysis", icon: MessageSquare },
         ];
       default:
         console.warn("Unknown role:", user.role);

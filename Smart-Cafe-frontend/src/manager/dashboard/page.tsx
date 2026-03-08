@@ -9,7 +9,6 @@ import StaffControls from "./components/StaffControls";
 import NotificationCenter from "./components/NotificationCenter";
 import SystemHealth from "./components/SystemHealth";
 import { getCanteens, type Canteen } from "../../services/canteen.service";
-import { AIInventoryInsights } from "./components/AIInventoryInsights";
 
 const STORAGE_KEY = "manager_selected_canteen";
 
@@ -40,10 +39,13 @@ const ManagerDashboard: React.FC = () => {
       try {
         const data = await getCanteens({ isActive: true });
         setCanteens(data);
-        
+
         // Restore selection from localStorage or use first canteen
         const savedCanteenId = localStorage.getItem(STORAGE_KEY);
-        if (savedCanteenId && data.some(c => c.id === savedCanteenId || c._id === savedCanteenId)) {
+        if (
+          savedCanteenId &&
+          data.some((c) => c.id === savedCanteenId || c._id === savedCanteenId)
+        ) {
           setSelectedCanteenId(savedCanteenId);
         } else if (data.length > 0) {
           const firstId = data[0].id || data[0]._id || "";
@@ -69,7 +71,9 @@ const ManagerDashboard: React.FC = () => {
 
   const handleRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const selectedCanteen = canteens.find(c => c.id === selectedCanteenId || c._id === selectedCanteenId);
+  const selectedCanteen = canteens.find(
+    (c) => c.id === selectedCanteenId || c._id === selectedCanteenId,
+  );
 
   return (
     <div className="space-y-6">
@@ -97,7 +101,10 @@ const ManagerDashboard: React.FC = () => {
                 className="bg-transparent border-none p-0 focus:ring-0 text-gray-800 font-medium cursor-pointer min-w-[120px]"
               >
                 {canteens.map((canteen) => (
-                  <option key={canteen.id || canteen._id} value={canteen.id || canteen._id}>
+                  <option
+                    key={canteen.id || canteen._id}
+                    value={canteen.id || canteen._id}
+                  >
                     {canteen.name}
                   </option>
                 ))}
@@ -141,33 +148,49 @@ const ManagerDashboard: React.FC = () => {
         </div>
       </header>
 
-      {/* AI Smart Insights Row */}
-      <AIInventoryInsights key={`ai-${refreshKey}`} />
-
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Row 1: Demand & Waste (Sustainability) */}
         <div className="lg:col-span-2">
-          <DemandForecast key={`df-${refreshKey}`} mealType={currentSession} />
+          <DemandForecast
+            key={`df-${refreshKey}`}
+            mealType={currentSession}
+            canteenId={selectedCanteenId}
+          />
         </div>
         <div className="lg:col-span-1">
-          <FoodWasteControl key={`fw-${refreshKey}`} />
+          <FoodWasteControl
+            key={`fw-${refreshKey}`}
+            canteenId={selectedCanteenId}
+          />
         </div>
 
         {/* Row 2: Operation Controls */}
         <div className="lg:col-span-1">
-          <QueueMonitor key={`qm-${refreshKey}`} canteenId={selectedCanteenId} />
+          <QueueMonitor
+            key={`qm-${refreshKey}`}
+            canteenId={selectedCanteenId}
+          />
         </div>
         <div className="lg:col-span-1">
-          <SlotManagement key={`sm-${refreshKey}`} canteenId={selectedCanteenId} />
+          <SlotManagement
+            key={`sm-${refreshKey}`}
+            canteenId={selectedCanteenId}
+          />
         </div>
         <div className="lg:col-span-1">
-          <RevenueStats key={`rs-${refreshKey}`} canteenId={selectedCanteenId} />
+          <RevenueStats
+            key={`rs-${refreshKey}`}
+            canteenId={selectedCanteenId}
+          />
         </div>
 
         {/* Row 3: Management & System */}
         <div className="lg:col-span-1">
-          <StaffControls key={`sc-${refreshKey}`} canteenId={selectedCanteenId} />
+          <StaffControls
+            key={`sc-${refreshKey}`}
+            canteenId={selectedCanteenId}
+          />
         </div>
         <div className="lg:col-span-1">
           <NotificationCenter key={`nc-${refreshKey}`} />

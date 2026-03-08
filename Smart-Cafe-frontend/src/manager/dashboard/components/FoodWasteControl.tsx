@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   Leaf,
@@ -14,9 +14,14 @@ import {
   updateSettingValue,
   getSetting,
 } from "../../../services/system.service";
+import { useRealtimeRefresh } from "../../../hooks/useRealtimeRefresh";
 import toast from "react-hot-toast";
 
-const FoodWasteControl: React.FC = () => {
+interface Props {
+  canteenId?: string;
+}
+
+const FoodWasteControl: React.FC<Props> = ({ canteenId }) => {
   const [portionSize, setPortionSize] = useState<"Standard" | "Small">(
     "Standard",
   );
@@ -24,26 +29,37 @@ const FoodWasteControl: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<WasteStats | null>(null);
 
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [wasteStats, portionSetting, surplusSetting] = await Promise.all([
+        getWasteStats().catch(() => null),
+        getSetting("portion_size").catch(() => null),
+        getSetting("surplus_donation_enabled").catch(() => null),
+      ]);
+      if (wasteStats) setStats(wasteStats);
+      if (portionSetting?.settingValue === "Small") setPortionSize("Small");
+      else setPortionSize("Standard");
+      if (surplusSetting?.settingValue === "true") setSurplusAvailable(true);
+      else setSurplusAvailable(false);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const [wasteStats, portionSetting, surplusSetting] = await Promise.all([
-          getWasteStats().catch(() => null),
-          getSetting("portion_size").catch(() => null),
-          getSetting("surplus_donation_enabled").catch(() => null),
-        ]);
-        if (wasteStats) setStats(wasteStats);
-        if (portionSetting?.settingValue === "Small") setPortionSize("Small");
-        if (surplusSetting?.settingValue === "true") setSurplusAvailable(true);
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadData();
   }, []);
+
+  // Real-time: refresh waste stats when students submit waste reports
+  const handleSustainabilityUpdate = useCallback(() => {
+    getWasteStats()
+      .then((wasteStats) => setStats(wasteStats))
+      .catch(() => {});
+  }, []);
+  useRealtimeRefresh(["sustainability:updated"], handleSustainabilityUpdate);
 
   const handlePortionChange = async (size: "Standard" | "Small") => {
     setPortionSize(size);

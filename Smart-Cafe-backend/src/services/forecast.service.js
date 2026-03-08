@@ -1,9 +1,37 @@
 const Forecast = require("../models/Forecast");
 const ForecastConfig = require("../models/ForecastConfig");
 const AcademicCalendar = require("../models/AcademicCalendar");
-const { Booking, Slot, MenuItem } = require("../models");
+const { Booking, Slot, MenuItem, Canteen } = require("../models");
 const { getDayBounds, formatDate } = require("../utils/helpers");
 const ApiError = require("../utils/ApiError");
+
+/**
+ * Cache for canteen capacity shares { fetchedAt, shares: { canteenId: fraction } }
+ * Recalculated every 10 minutes
+ */
+let _canteenShareCache = { shares: {}, totalCapacity: 0, fetchedAt: 0 };
+const CANTEEN_SHARE_TTL = 10 * 60 * 1000;
+
+const getCanteenShares = async () => {
+  const now = Date.now();
+  if (
+    Object.keys(_canteenShareCache.shares).length > 0 &&
+    now - _canteenShareCache.fetchedAt < CANTEEN_SHARE_TTL
+  ) {
+    return _canteenShareCache;
+  }
+  const canteens = await Canteen.find({ isActive: true })
+    .select("_id capacity name")
+    .lean();
+  const totalCapacity = canteens.reduce((s, c) => s + (c.capacity || 100), 0);
+  const shares = {};
+  for (const c of canteens) {
+    const id = c._id.toString();
+    shares[id] = (c.capacity || 100) / totalCapacity;
+  }
+  _canteenShareCache = { shares, totalCapacity, fetchedAt: now };
+  return _canteenShareCache;
+};
 
 const FORECAST_SERVICE_URL =
   process.env.FORECAST_SERVICE_URL || "http://localhost:5001";
@@ -29,7 +57,7 @@ const getMLPrediction = async (data) => {
 /**
  * Calculate historical average for fallback forecasting
  */
-const calculateHistoricalAverage = async (mealType, targetDate) => {
+const calculateHistoricalAverage = async (mealType, targetDate, canteenId) => {
   const historicalDates = [];
   for (let i = 1; i <= 4; i++) {
     const pastDate = new Date(targetDate);
@@ -42,10 +70,12 @@ const calculateHistoricalAverage = async (mealType, targetDate) => {
 
   for (const date of historicalDates) {
     const { start, end } = getDayBounds(date);
-    const slots = await Slot.find({
+    const slotQuery = {
       date: { $gte: start, $lte: end },
       mealType,
-    });
+    };
+    if (canteenId) slotQuery.canteenId = canteenId;
+    const slots = await Slot.find(slotQuery);
 
     if (slots.length > 0) {
       const bookings = slots.reduce((sum, slot) => sum + slot.booked, 0);
@@ -259,9 +289,10 @@ const WEATHER_DEMAND_MULT = {
 };
 
 /**
- * Generate forecast for a date and meal type
+ * Generate forecast for a date and meal type (per canteen)
  */
-const generateForecast = async (date, mealType) => {
+const generateForecast = async (date, mealType, canteenId) => {
+  const cid = canteenId || "default";
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
@@ -269,7 +300,11 @@ const generateForecast = async (date, mealType) => {
   today.setHours(0, 0, 0, 0);
   const isTodayOrFuture = targetDate.getTime() >= today.getTime();
 
-  const existing = await Forecast.findOne({ date: targetDate, mealType });
+  const existing = await Forecast.findOne({
+    date: targetDate,
+    mealType,
+    canteenId: cid,
+  });
 
   // For past dates, always return cached forecast
   // For today/future: return cached ONLY if it already has an ML prediction
@@ -316,7 +351,7 @@ const generateForecast = async (date, mealType) => {
     await Forecast.deleteOne({ _id: existing._id });
   }
 
-  // Generate fresh forecast using ML model + current weather/events
+  // Generate fresh forecast using ML model + current weather/events (per canteen)
   const DAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const dayOfWeek = targetDate.getDay();
 
@@ -327,6 +362,18 @@ const generateForecast = async (date, mealType) => {
   const events = await AcademicCalendar.getActiveEvents(targetDate);
   const eventContext = events.length > 0 ? events[0].eventType : "Normal";
   const demandMultiplier = events.length > 0 ? events[0].demandMultiplier : 1.0;
+
+  // Get canteen capacity share for proportional scaling
+  const canteenShares = await getCanteenShares();
+  const canteenShare =
+    cid !== "default" && canteenShares.shares[cid]
+      ? canteenShares.shares[cid]
+      : 1.0;
+  // Unique hash seed per canteen for deterministic but varied predictions
+  const canteenSeed =
+    cid !== "default"
+      ? cid.split("").reduce((s, c) => s + c.charCodeAt(0), 0)
+      : 0;
 
   // Try ML prediction — predict both veg and non-veg, sum for total demand
   const mlInput = {
@@ -349,30 +396,48 @@ const generateForecast = async (date, mealType) => {
       ? vegPred + nonVegPred
       : vegPred || nonVegPred || null;
 
+  // Scale ML prediction by canteen's capacity share + add per-canteen variance
+  if (predictedCount && cid !== "default") {
+    predictedCount = Math.round(predictedCount * canteenShare);
+    // Add small per-canteen variance (±8%) so each canteen number is unique
+    const cidHash =
+      (canteenSeed * 7 + dayOfWeek * 13 + mealType.charCodeAt(0) * 3) % 100;
+    const cidVariance = 1 + (cidHash / 100 - 0.5) * 0.16;
+    predictedCount = Math.round(predictedCount * cidVariance);
+  }
+
   // Fallback: historical average OR varied base demand
   if (!predictedCount) {
     const historicalAvg = await calculateHistoricalAverage(
       mealType,
       targetDate,
+      canteenId,
     );
     if (historicalAvg > 50) {
       predictedCount = historicalAvg;
+      // Scale historical average by canteen share if not default
+      if (cid !== "default") {
+        predictedCount = Math.round(predictedCount * canteenShare);
+      }
     } else {
-      // Use varied base demand instead of flat 50
+      // Use varied base demand scaled by canteen capacity share
       const base = getBaseDemand(mealType, dayOfWeek);
       const weatherMult = WEATHER_DEMAND_MULT[weather.condition] || 1.0;
-      // Add daily variance (±15%) for realistic variation
+      // Canteen-specific variance using canteen seed + date hash
       const dayHash =
         targetDate.getDate() * 7 +
         targetDate.getMonth() * 31 +
-        mealType.charCodeAt(0);
+        mealType.charCodeAt(0) +
+        canteenSeed;
       const variance =
         1 + (((dayHash * 9301 + 49297) % 233280) / 233280 - 0.5) * 0.3;
-      predictedCount = Math.round(base * weatherMult * variance);
+      // Scale base demand by canteen's proportion of total capacity
+      const scaledBase = cid !== "default" ? base * canteenShare : base;
+      predictedCount = Math.round(scaledBase * weatherMult * variance);
     }
   }
 
-  predictedCount = Math.round(predictedCount * demandMultiplier);
+  predictedCount = Math.max(1, Math.round(predictedCount * demandMultiplier));
 
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
   const isSpecialPeriod = events.length > 0 || isWeekend;
@@ -390,6 +455,7 @@ const generateForecast = async (date, mealType) => {
     isSpecialPeriod,
     specialPeriodType,
     modelVersion: "v2.0-gb",
+    canteenId: cid,
   });
 
   return forecast;
@@ -498,17 +564,19 @@ const parseSlotHour = (timeStr) => {
  * Groups completed bookings by slot hour per meal type over the last N days.
  * Returns { BREAKFAST: [{hour, factor}, ...], ... } or null if insufficient data.
  */
-const learnPeakFactors = async (targetDate, lookbackDays = 30) => {
+const learnPeakFactors = async (targetDate, lookbackDays = 30, canteenId) => {
   const endDate = new Date(targetDate);
   endDate.setHours(0, 0, 0, 0);
   const startDate = new Date(endDate);
   startDate.setDate(startDate.getDate() - lookbackDays);
 
   // Find all slots in the lookback window that had bookings
-  const slots = await Slot.find({
+  const slotQuery = {
     date: { $gte: startDate, $lt: endDate },
     booked: { $gt: 0 },
-  })
+  };
+  if (canteenId) slotQuery.canteenId = canteenId;
+  const slots = await Slot.find(slotQuery)
     .select("date time mealType booked")
     .lean();
 
@@ -546,13 +614,15 @@ const learnPeakFactors = async (targetDate, lookbackDays = 30) => {
 /**
  * Get actual booked counts per slot for a given date (for real-time overlay)
  */
-const getActualSlotCounts = async (targetDate) => {
+const getActualSlotCounts = async (targetDate, canteenId) => {
   const nextDate = new Date(targetDate);
   nextDate.setDate(nextDate.getDate() + 1);
-  const slots = await Slot.find({
+  const slotQuery = {
     date: { $gte: targetDate, $lt: nextDate },
     booked: { $gt: 0 },
-  })
+  };
+  if (canteenId) slotQuery.canteenId = canteenId;
+  const slots = await Slot.find(slotQuery)
     .select("time mealType booked")
     .lean();
 
@@ -570,7 +640,7 @@ const getActualSlotCounts = async (targetDate) => {
  * Get hourly forecast for a date — uses learned booking patterns when available,
  * falls back to default peak factors, and overlays real-time slot bookings for today.
  */
-const getHourlyForecast = async (date) => {
+const getHourlyForecast = async (date, canteenId) => {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
@@ -578,16 +648,16 @@ const getHourlyForecast = async (date) => {
   today.setHours(0, 0, 0, 0);
   const isToday = targetDate.getTime() === today.getTime();
 
-  // 1. Get ML-predicted daily totals per meal
+  // 1. Get ML-predicted daily totals per meal (per canteen)
   const mealTypes = ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"];
   const dailyForecasts = {};
   for (const mt of mealTypes) {
-    const f = await generateForecast(targetDate, mt);
+    const f = await generateForecast(targetDate, mt, canteenId);
     dailyForecasts[mt] = f.predictedCount;
   }
 
   // 2. Try to learn peak factors from historical booking patterns
-  const learnedFactors = await learnPeakFactors(targetDate);
+  const learnedFactors = await learnPeakFactors(targetDate, 30, canteenId);
 
   // 3. Merge learned + default factors (learned takes priority)
   const peakFactors = {};
@@ -599,7 +669,9 @@ const getHourlyForecast = async (date) => {
   }
 
   // 4. For today, also get real-time booked counts per slot
-  const actualCounts = isToday ? await getActualSlotCounts(targetDate) : {};
+  const actualCounts = isToday
+    ? await getActualSlotCounts(targetDate, canteenId)
+    : {};
 
   // 5. Build hourly slots with predictions + actuals
   const hourlySlots = [];
@@ -630,7 +702,7 @@ const getHourlyForecast = async (date) => {
 /**
  * Get category-level forecast (by item category)
  */
-const getCategoryForecast = async (date) => {
+const getCategoryForecast = async (date, canteenId) => {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
@@ -638,7 +710,7 @@ const getCategoryForecast = async (date) => {
   const result = [];
 
   for (const mealType of mealTypes) {
-    const forecast = await generateForecast(targetDate, mealType);
+    const forecast = await generateForecast(targetDate, mealType, canteenId);
     const items = await MenuItem.find({
       category: mealType,
       isAvailable: true,
@@ -666,13 +738,15 @@ const getCategoryForecast = async (date) => {
 /**
  * Get daily forecast
  */
-const getDailyForecast = async (date) => {
+const getDailyForecast = async (date, canteenId) => {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
   const mealTypes = ["BREAKFAST", "LUNCH", "DINNER", "SNACKS"];
   const forecasts = await Promise.all(
-    mealTypes.map((mealType) => generateForecast(targetDate, mealType)),
+    mealTypes.map((mealType) =>
+      generateForecast(targetDate, mealType, canteenId),
+    ),
   );
 
   return { date: formatDate(targetDate), forecasts };
@@ -681,7 +755,7 @@ const getDailyForecast = async (date) => {
 /**
  * Get weekly forecast
  */
-const getWeeklyForecast = async (startDate) => {
+const getWeeklyForecast = async (startDate, canteenId) => {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
 
@@ -689,7 +763,7 @@ const getWeeklyForecast = async (startDate) => {
   for (let i = 0; i < 7; i++) {
     const date = new Date(start);
     date.setDate(date.getDate() + i);
-    weeklyForecasts.push(await getDailyForecast(date));
+    weeklyForecasts.push(await getDailyForecast(date, canteenId));
   }
   return weeklyForecasts;
 };
@@ -697,11 +771,13 @@ const getWeeklyForecast = async (startDate) => {
 /**
  * Record actual consumption
  */
-const recordActual = async (date, mealType, actualCount) => {
+const recordActual = async (date, mealType, actualCount, canteenId) => {
   const targetDate = new Date(date);
   targetDate.setHours(0, 0, 0, 0);
 
-  const forecast = await Forecast.findOne({ date: targetDate, mealType });
+  const query = { date: targetDate, mealType };
+  if (canteenId) query.canteenId = canteenId;
+  const forecast = await Forecast.findOne(query);
   if (!forecast) throw ApiError.notFound("Forecast not found for this date");
 
   forecast.actualCount = actualCount;
@@ -714,7 +790,7 @@ const recordActual = async (date, mealType, actualCount) => {
  * Get forecast accuracy metrics (enhanced with RMSE, MAPE)
  */
 const getAccuracyMetrics = async (query = {}) => {
-  const { startDate, endDate, mealType } = query;
+  const { startDate, endDate, mealType, canteenId } = query;
 
   const matchStage = {
     actualCount: { $exists: true, $ne: null },
@@ -724,6 +800,7 @@ const getAccuracyMetrics = async (query = {}) => {
     matchStage.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
   }
   if (mealType) matchStage.mealType = mealType;
+  if (canteenId) matchStage.canteenId = canteenId;
 
   const forecasts = await Forecast.find(matchStage);
   if (forecasts.length === 0) {
@@ -809,7 +886,7 @@ const getAccuracyMetrics = async (query = {}) => {
 /**
  * Get weekly trends for long-term analysis
  */
-const getWeeklyTrends = async (weeks = 12) => {
+const getWeeklyTrends = async (weeks = 12, canteenId) => {
   const now = new Date();
   const trends = [];
   for (let w = weeks - 1; w >= 0; w--) {
@@ -820,10 +897,12 @@ const getWeeklyTrends = async (weeks = 12) => {
     weekEnd.setDate(weekEnd.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
-    const forecasts = await Forecast.find({
+    const forecastQuery = {
       date: { $gte: weekStart, $lte: weekEnd },
       actualCount: { $exists: true, $ne: null },
-    });
+    };
+    if (canteenId) forecastQuery.canteenId = canteenId;
+    const forecasts = await Forecast.find(forecastQuery);
 
     trends.push({
       weekStart: formatDate(weekStart),
@@ -846,7 +925,7 @@ const getWeeklyTrends = async (weeks = 12) => {
 /**
  * Get monthly trends
  */
-const getMonthlyTrends = async (months = 6) => {
+const getMonthlyTrends = async (months = 6, canteenId) => {
   const now = new Date();
   const trends = [];
   const monthNames = [
@@ -876,10 +955,12 @@ const getMonthlyTrends = async (months = 6) => {
       999,
     );
 
-    const forecasts = await Forecast.find({
+    const forecastQuery = {
       date: { $gte: monthStart, $lte: monthEnd },
       actualCount: { $exists: true, $ne: null },
-    });
+    };
+    if (canteenId) forecastQuery.canteenId = canteenId;
+    const forecasts = await Forecast.find(forecastQuery);
 
     trends.push({
       month: monthNames[monthStart.getMonth()],

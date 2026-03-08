@@ -1,56 +1,60 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const STATUSES = ['Open', 'Closed', 'Closing Soon'];
-const CROWD_LEVELS = ['Low', 'Medium', 'High'];
-const ECO_SCORES = ['A', 'B', 'C', 'D', 'E'];
+const STATUSES = ["Open", "Closed", "Closing Soon"];
+const CROWD_LEVELS = ["Low", "Medium", "High"];
+const ECO_SCORES = ["A", "B", "C", "D", "E"];
 
 const operatingHoursSchema = new mongoose.Schema(
   {
-    open: { type: String, default: '08:00' },
-    close: { type: String, default: '20:00' },
+    open: { type: String, default: "08:00" },
+    close: { type: String, default: "20:00" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const canteenSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Canteen name is required'],
+      required: [true, "Canteen name is required"],
       trim: true,
-      maxlength: [100, 'Canteen name cannot exceed 100 characters'],
+      maxlength: [100, "Canteen name cannot exceed 100 characters"],
     },
     location: {
       type: String,
       trim: true,
-      maxlength: [200, 'Location cannot exceed 200 characters'],
-      default: '',
+      maxlength: [200, "Location cannot exceed 200 characters"],
+      default: "",
     },
     status: {
       type: String,
       enum: {
         values: STATUSES,
-        message: 'Invalid status',
+        message: "Invalid status",
       },
-      default: 'Open',
+      default: "Open",
     },
     crowd: {
       type: String,
       enum: {
         values: CROWD_LEVELS,
-        message: 'Invalid crowd level',
+        message: "Invalid crowd level",
       },
-      default: 'Low',
+      default: "Low",
     },
     capacity: {
       type: Number,
-      required: [true, 'Capacity is required'],
-      min: [1, 'Capacity must be at least 1'],
+      required: [true, "Capacity is required"],
+      min: [1, "Capacity must be at least 1"],
     },
     occupancy: {
       type: Number,
       default: 0,
-      min: [0, 'Occupancy cannot be negative'],
+      min: [0, "Occupancy cannot be negative"],
+    },
+    manualOccupancyOverride: {
+      type: Boolean,
+      default: false,
     },
     isActive: {
       type: Boolean,
@@ -62,7 +66,7 @@ const canteenSchema = new mongoose.Schema(
     },
     imageColor: {
       type: String,
-      default: 'bg-orange-100',
+      default: "bg-orange-100",
     },
     operatingHours: {
       type: operatingHoursSchema,
@@ -72,14 +76,14 @@ const canteenSchema = new mongoose.Schema(
       type: String,
       enum: {
         values: ECO_SCORES,
-        message: 'Invalid eco score',
+        message: "Invalid eco score",
       },
-      default: 'B',
+      default: "B",
     },
     description: {
       type: String,
       trim: true,
-      maxlength: [500, 'Description cannot exceed 500 characters'],
+      maxlength: [500, "Description cannot exceed 500 characters"],
     },
   },
   {
@@ -92,15 +96,15 @@ const canteenSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 // Indexes
-canteenSchema.index({ name: 'text', location: 'text' });
+canteenSchema.index({ name: "text", location: "text" });
 canteenSchema.index({ status: 1 });
 canteenSchema.index({ isActive: 1 });
 
-const Canteen = mongoose.model('Canteen', canteenSchema);
+const Canteen = mongoose.model("Canteen", canteenSchema);
 
 module.exports = Canteen;
 module.exports.STATUSES = STATUSES;

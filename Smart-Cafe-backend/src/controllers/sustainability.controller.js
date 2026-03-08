@@ -1,20 +1,27 @@
-const sustainabilityService = require('../services/sustainability.service');
-const catchAsync = require('../utils/catchAsync');
-const ApiResponse = require('../utils/ApiResponse');
+const sustainabilityService = require("../services/sustainability.service");
+const catchAsync = require("../utils/catchAsync");
+const ApiResponse = require("../utils/ApiResponse");
+const { emitToAll } = require("../utils/socketEmitter");
 
 /**
  * Submit waste report
  * POST /api/sustainability/waste-report
  */
 const submitWasteReport = catchAsync(async (req, res) => {
-  const report = await sustainabilityService.submitWasteReport(req.userId, req.body);
+  const report = await sustainabilityService.submitWasteReport(
+    req.userId,
+    req.body,
+  );
 
   // Refresh eco-scores in the background after a new report
-  sustainabilityService.refreshEcoScores().catch((err) =>
-    console.error('Eco-score refresh error:', err.message),
-  );
-  
-  ApiResponse.created(res, 'Waste report submitted', report);
+  sustainabilityService
+    .refreshEcoScores()
+    .catch((err) => console.error("Eco-score refresh error:", err.message));
+
+  // Broadcast so manager dashboard waste control updates in real-time
+  emitToAll("sustainability:updated", { action: "waste-report", report });
+
+  ApiResponse.created(res, "Waste report submitted", report);
 });
 
 /**
@@ -22,9 +29,12 @@ const submitWasteReport = catchAsync(async (req, res) => {
  * GET /api/sustainability/my-reports
  */
 const getMyWasteReports = catchAsync(async (req, res) => {
-  const result = await sustainabilityService.getUserWasteReports(req.userId, req.query);
-  
-  ApiResponse.ok(res, 'Waste reports retrieved', result);
+  const result = await sustainabilityService.getUserWasteReports(
+    req.userId,
+    req.query,
+  );
+
+  ApiResponse.ok(res, "Waste reports retrieved", result);
 });
 
 /**
@@ -33,8 +43,8 @@ const getMyWasteReports = catchAsync(async (req, res) => {
  */
 const getWasteStats = catchAsync(async (req, res) => {
   const result = await sustainabilityService.getWasteStats(req.query);
-  
-  ApiResponse.ok(res, 'Waste statistics retrieved', result);
+
+  ApiResponse.ok(res, "Waste statistics retrieved", result);
 });
 
 /**
@@ -42,9 +52,11 @@ const getWasteStats = catchAsync(async (req, res) => {
  * GET /api/sustainability/metrics
  */
 const getSustainabilityMetrics = catchAsync(async (req, res) => {
-  const result = await sustainabilityService.getSustainabilityMetrics(req.userId);
-  
-  ApiResponse.ok(res, 'Sustainability metrics retrieved', result);
+  const result = await sustainabilityService.getSustainabilityMetrics(
+    req.userId,
+  );
+
+  ApiResponse.ok(res, "Sustainability metrics retrieved", result);
 });
 
 /**
@@ -53,8 +65,8 @@ const getSustainabilityMetrics = catchAsync(async (req, res) => {
  */
 const logDonation = catchAsync(async (req, res) => {
   const result = await sustainabilityService.logDonation(req.body, req.userId);
-  
-  ApiResponse.created(res, 'Donation logged and students notified', result);
+
+  ApiResponse.created(res, "Donation logged and students notified", result);
 });
 
 /**
@@ -63,8 +75,8 @@ const logDonation = catchAsync(async (req, res) => {
  */
 const getDonationHistory = catchAsync(async (req, res) => {
   const result = await sustainabilityService.getDonationHistory(req.query);
-  
-  ApiResponse.ok(res, 'Donation history retrieved', result);
+
+  ApiResponse.ok(res, "Donation history retrieved", result);
 });
 
 module.exports = {

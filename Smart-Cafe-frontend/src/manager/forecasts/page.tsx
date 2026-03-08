@@ -63,6 +63,10 @@ const ManagerForecasts: React.FC = () => {
   const [mealFilter, setMealFilter] = useState("All");
   const [loading, setLoading] = useState(true);
 
+  // Get saved canteen selection from localStorage
+  const savedCanteenId =
+    localStorage.getItem("manager_selected_canteen") || undefined;
+
   // Overview data
   const [chartData, setChartData] = useState<number[]>([]);
   const [chartActuals, setChartActuals] = useState<number[]>([]);
@@ -151,8 +155,8 @@ const ManagerForecasts: React.FC = () => {
       const weekStartStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
 
       const [weekly, daily, acc] = await Promise.all([
-        getWeeklyForecast(weekStartStr).catch(() => []),
-        getDailyForecast(todayStr).catch(() => null),
+        getWeeklyForecast(weekStartStr, savedCanteenId).catch(() => []),
+        getDailyForecast(todayStr, savedCanteenId).catch(() => null),
         getAccuracyMetrics().catch(() => null),
       ]);
 
@@ -213,7 +217,7 @@ const ManagerForecasts: React.FC = () => {
   const loadHourly = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const data = await getHourlyForecast(today);
+      const data = await getHourlyForecast(today, savedCanteenId);
       setHourlyData(data || []);
     } catch {
       setHourlyData([]);

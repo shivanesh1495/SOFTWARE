@@ -2,6 +2,7 @@ const { systemService, backupService } = require("../services");
 const { AuditLog } = require("../models");
 const catchAsync = require("../utils/catchAsync");
 const ApiResponse = require("../utils/ApiResponse");
+const { emitToAll } = require("../utils/socketEmitter");
 
 /**
  * Get all settings
@@ -97,6 +98,13 @@ const updateSettingValue = catchAsync(async (req, res) => {
     req.body.value,
     req.userId,
   );
+
+  // Broadcast setting change in real-time so staff/student dashboards update instantly
+  emitToAll("settings:updated", {
+    key: req.params.key.toUpperCase(),
+    value: req.body.value,
+    setting,
+  });
 
   ApiResponse.ok(res, "Setting updated", setting);
 });

@@ -120,33 +120,47 @@ export interface AnalyticsResponse {
 
 export const getDailyForecast = async (
   date?: string,
+  canteenId?: string,
 ): Promise<DailyForecast> => {
+  const params: Record<string, string> = {};
+  if (date) params.date = date;
+  if (canteenId) params.canteenId = canteenId;
   const response = await api.get("/forecast/daily", {
-    params: date ? { date } : undefined,
+    params: Object.keys(params).length > 0 ? params : undefined,
   });
   return response.data.data;
 };
 
 export const getWeeklyForecast = async (
   startDate?: string,
+  canteenId?: string,
 ): Promise<DailyForecast[]> => {
+  const params: Record<string, string> = {};
+  if (startDate) params.startDate = startDate;
+  if (canteenId) params.canteenId = canteenId;
   const response = await api.get("/forecast/weekly", {
-    params: startDate ? { startDate } : undefined,
+    params: Object.keys(params).length > 0 ? params : undefined,
   });
   return response.data.data;
 };
 
 export const getHourlyForecast = async (
   date: string,
+  canteenId?: string,
 ): Promise<HourlyForecast[]> => {
-  const response = await api.get(`/forecast/hourly/${date}`);
+  const response = await api.get(`/forecast/hourly/${date}`, {
+    params: canteenId ? { canteenId } : undefined,
+  });
   return response.data.data;
 };
 
 export const getCategoryForecast = async (
   date: string,
+  canteenId?: string,
 ): Promise<CategoryForecast[]> => {
-  const response = await api.get(`/forecast/category/${date}`);
+  const response = await api.get(`/forecast/category/${date}`, {
+    params: canteenId ? { canteenId } : undefined,
+  });
   return response.data.data;
 };
 

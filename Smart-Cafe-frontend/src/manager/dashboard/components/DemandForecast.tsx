@@ -21,9 +21,10 @@ import {
 
 interface Props {
   mealType?: string;
+  canteenId?: string;
 }
 
-const DemandForecast: React.FC<Props> = ({ mealType }) => {
+const DemandForecast: React.FC<Props> = ({ mealType, canteenId }) => {
   const navigate = useNavigate();
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showAIRecommendation, setShowAIRecommendation] = useState(true);
@@ -36,10 +37,10 @@ const DemandForecast: React.FC<Props> = ({ mealType }) => {
         setLoading(true);
         const today = new Date().toISOString().split("T")[0];
 
-        // Fetch base forecast data and hourly data in parallel
+        // Fetch base forecast data and hourly data in parallel (per canteen)
         const [dailyData, hourlyData] = await Promise.all([
-          getDailyForecast(),
-          getHourlyForecast(today),
+          getDailyForecast(undefined, canteenId),
+          getHourlyForecast(today, canteenId),
         ]);
         const baseForecastsList = dailyData.forecasts || [];
 
@@ -75,7 +76,7 @@ const DemandForecast: React.FC<Props> = ({ mealType }) => {
       }
     };
     load();
-  }, [mealType]);
+  }, [mealType, canteenId]);
 
   // Sum approximation rounding: individual meals to nearest 5, total to nearest 10
   const roundTo5 = (v: number) => Math.round(v / 5) * 5;

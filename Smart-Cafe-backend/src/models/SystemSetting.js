@@ -1,36 +1,43 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const DATA_TYPES = ['STRING', 'NUMBER', 'BOOLEAN', 'JSON'];
-const CATEGORIES = ['BOOKING', 'CAPACITY', 'NOTIFICATION', 'SECURITY', 'GENERAL'];
+const DATA_TYPES = ["STRING", "NUMBER", "BOOLEAN", "JSON"];
+const CATEGORIES = [
+  "BOOKING",
+  "CAPACITY",
+  "NOTIFICATION",
+  "SECURITY",
+  "GENERAL",
+  "FOOD",
+];
 
 const systemSettingSchema = new mongoose.Schema(
   {
     settingKey: {
       type: String,
-      required: [true, 'Setting key is required'],
+      required: [true, "Setting key is required"],
       unique: true,
       trim: true,
       uppercase: true,
     },
     settingValue: {
       type: String,
-      required: [true, 'Setting value is required'],
+      required: [true, "Setting value is required"],
     },
     dataType: {
       type: String,
       enum: {
         values: DATA_TYPES,
-        message: 'Invalid data type',
+        message: "Invalid data type",
       },
-      default: 'STRING',
+      default: "STRING",
     },
     category: {
       type: String,
       enum: {
         values: CATEGORIES,
-        message: 'Invalid category',
+        message: "Invalid category",
       },
-      default: 'GENERAL',
+      default: "GENERAL",
     },
     description: {
       type: String,
@@ -51,20 +58,20 @@ const systemSettingSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 // Index
 systemSettingSchema.index({ category: 1 });
 
 // Virtual to get typed value
-systemSettingSchema.virtual('typedValue').get(function () {
+systemSettingSchema.virtual("typedValue").get(function () {
   switch (this.dataType) {
-    case 'NUMBER':
+    case "NUMBER":
       return parseFloat(this.settingValue);
-    case 'BOOLEAN':
-      return this.settingValue.toLowerCase() === 'true';
-    case 'JSON':
+    case "BOOLEAN":
+      return this.settingValue.toLowerCase() === "true";
+    case "JSON":
       try {
         return JSON.parse(this.settingValue);
       } catch {
@@ -83,21 +90,24 @@ systemSettingSchema.statics.getValue = async function (key) {
 };
 
 // Static method to set value
-systemSettingSchema.statics.setValue = async function (key, value, options = {}) {
+systemSettingSchema.statics.setValue = async function (
+  key,
+  value,
+  options = {},
+) {
   const update = {
     settingKey: key.toUpperCase(),
     settingValue: String(value),
     ...options,
   };
-  
-  return this.findOneAndUpdate(
-    { settingKey: key.toUpperCase() },
-    update,
-    { upsert: true, new: true }
-  );
+
+  return this.findOneAndUpdate({ settingKey: key.toUpperCase() }, update, {
+    upsert: true,
+    new: true,
+  });
 };
 
-const SystemSetting = mongoose.model('SystemSetting', systemSettingSchema);
+const SystemSetting = mongoose.model("SystemSetting", systemSettingSchema);
 
 module.exports = SystemSetting;
 module.exports.DATA_TYPES = DATA_TYPES;

@@ -1,7 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const { systemController } = require("../controllers");
-const { authenticate, isAdmin, isManagement, validate } = require("../middlewares");
+const {
+  authenticate,
+  isAdmin,
+  isManagement,
+  validate,
+} = require("../middlewares");
 const { systemValidation } = require("../validations");
 
 // Public route for booking/walk-in status
@@ -37,7 +42,7 @@ router.post(
 );
 router.patch(
   "/:key",
-  isAdmin,
+  isManagement,
   validate(systemValidation.updateSettingValue),
   systemController.updateSettingValue,
 );

@@ -4,32 +4,43 @@ const ApiResponse = require("../utils/ApiResponse");
 
 const getDailyForecast = catchAsync(async (req, res) => {
   const date = req.query.date || new Date();
-  const result = await forecastService.getDailyForecast(date);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getDailyForecast(date, canteenId);
   ApiResponse.ok(res, "Daily forecast retrieved", result);
 });
 
 const getWeeklyForecast = catchAsync(async (req, res) => {
   const startDate = req.query.startDate || new Date();
-  const result = await forecastService.getWeeklyForecast(startDate);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getWeeklyForecast(startDate, canteenId);
   ApiResponse.ok(res, "Weekly forecast retrieved", result);
 });
 
 const getHourlyForecast = catchAsync(async (req, res) => {
-  const result = await forecastService.getHourlyForecast(req.params.date);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getHourlyForecast(
+    req.params.date,
+    canteenId,
+  );
   ApiResponse.ok(res, "Hourly forecast retrieved", result);
 });
 
 const getCategoryForecast = catchAsync(async (req, res) => {
-  const result = await forecastService.getCategoryForecast(req.params.date);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getCategoryForecast(
+    req.params.date,
+    canteenId,
+  );
   ApiResponse.ok(res, "Category forecast retrieved", result);
 });
 
 const recordActual = catchAsync(async (req, res) => {
-  const { date, mealType, actualCount } = req.body;
+  const { date, mealType, actualCount, canteenId } = req.body;
   const forecast = await forecastService.recordActual(
     date,
     mealType,
     actualCount,
+    canteenId,
   );
   ApiResponse.ok(res, "Actual consumption recorded", forecast);
 });
@@ -41,13 +52,15 @@ const getAccuracyMetrics = catchAsync(async (req, res) => {
 
 const getWeeklyTrends = catchAsync(async (req, res) => {
   const weeks = parseInt(req.query.weeks) || 12;
-  const result = await forecastService.getWeeklyTrends(weeks);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getWeeklyTrends(weeks, canteenId);
   ApiResponse.ok(res, "Weekly trends retrieved", result);
 });
 
 const getMonthlyTrends = catchAsync(async (req, res) => {
   const months = parseInt(req.query.months) || 6;
-  const result = await forecastService.getMonthlyTrends(months);
+  const canteenId = req.query.canteenId;
+  const result = await forecastService.getMonthlyTrends(months, canteenId);
   ApiResponse.ok(res, "Monthly trends retrieved", result);
 });
 
