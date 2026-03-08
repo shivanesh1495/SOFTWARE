@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import Button from "../../components/common/Button";
+import Modal from "../../components/common/Modal";
 import {
   Search,
   Leaf,
@@ -9,9 +10,21 @@ import {
   ShoppingBag,
   Plus,
   Minus,
+  Sparkles,
+  Loader2,
+  Apple,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getMenuItems, type MenuItem } from "../../services/menu.service";
+import {
+  getNutritionForItems,
+  type BestNutritionItem,
+  type NutrientEstimate,
+} from "../../services/nutrition.service";
+import {
+  getDietRecommendations,
+  type DietRecommendation,
+} from "../../services/ai.service";
 import * as canteenService from "../../services/canteen.service";
 import type { Canteen } from "../../services/canteen.service";
 import { getPublicSettings } from "../../services/system.service";
@@ -31,6 +44,7 @@ interface FrontendMenuItem {
   ecoScore: number;
   imageColor: string;
   isVeg: boolean;
+  isAvailable: boolean;
 }
 
 const COLORS = [
@@ -68,6 +82,29 @@ const StudentBooking: React.FC = () => {
   const [canteens, setCanteens] = useState<Canteen[]>([]);
   const [canteensLoading, setCanteensLoading] = useState(true);
   const [serviceNotice, setServiceNotice] = useState("");
+  const [isNutritionModalOpen, setIsNutritionModalOpen] = useState(false);
+  const [selectedNutritionItemIds, setSelectedNutritionItemIds] = useState<
+    string[]
+  >([]);
+  const [nutritionLoading, setNutritionLoading] = useState(false);
+  const [nutritionError, setNutritionError] = useState("");
+  const [nutritionValues, setNutritionValues] = useState<NutrientEstimate[]>(
+    [],
+  );
+  const [nutritionNotice, setNutritionNotice] = useState("");
+  const [nutritionSearchQuery, setNutritionSearchQuery] = useState("");
+  const [bestNutritionItem, setBestNutritionItem] =
+    useState<BestNutritionItem | null>(null);
+
+  // Diet Check state
+  const [isDietModalOpen, setIsDietModalOpen] = useState(false);
+  const [selectedDiet, setSelectedDiet] = useState("");
+  const [dietLoading, setDietLoading] = useState(false);
+  const [dietRecommendations, setDietRecommendations] = useState<
+    DietRecommendation[]
+  >([]);
+  const [dietSummary, setDietSummary] = useState("");
+  const [dietError, setDietError] = useState("");
 
   // Fetch Menu on mount
   useEffect(() => {
@@ -158,6 +195,7 @@ const StudentBooking: React.FC = () => {
         type: mapDietaryType(item.dietaryType),
         isJain: item.dietaryType === "Jain",
         isVeg: item.dietaryType !== "Non-Veg" && item.dietaryType !== "Egg",
+        isAvailable: item.isAvailable !== false,
         allergens: item.allergens || [],
         ecoScore: mapEcoScore(item.ecoScore),
         imageColor: getColor(item.itemName),
@@ -251,7 +289,116 @@ const StudentBooking: React.FC = () => {
     );
   });
 
+  const availableItems = menuItems.filter((item) => item.isAvailable);
+
+  const toggleNutritionItem = (itemId: string) => {
+    setSelectedNutritionItemIds((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId],
+    );
+  };
+
+  const openNutritionModal = () => {
+    setNutritionError("");
+    setNutritionNotice("");
+    setNutritionSearchQuery("");
+    setBestNutritionItem(null);
+    setNutritionValues([]);
+    setSelectedNutritionItemIds([]);
+    setIsNutritionModalOpen(true);
+  };
+
+  const fetchNutritionValues = async () => {
+    if (selectedNutritionItemIds.length === 0) {
+      setNutritionError("Please choose at least one food item.");
+      return;
+    }
+
+    const selectedNames = availableItems
+      .filter((item) => selectedNutritionItemIds.includes(item.id))
+      .map((item) => item.name);
+
+    if (selectedNames.length === 0) {
+      setNutritionError("Selected items are not available.");
+      return;
+    }
+
+    try {
+      setNutritionLoading(true);
+      setNutritionError("");
+      setNutritionNotice("");
+      setBestNutritionItem(null);
+      const response = await getNutritionForItems(selectedNames);
+      setNutritionValues(response.items || []);
+      if (response.bestItem) {
+        setBestNutritionItem(response.bestItem);
+      }
+      if (response.fallback) {
+        setNutritionNotice(
+          response.note || "Showing approximate local nutrient estimates.",
+        );
+      }
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        "Failed to fetch nutrient values. Please try again.";
+      setNutritionError(message);
+      toast.error(message);
+    } finally {
+      setNutritionLoading(false);
+    }
+  };
+
+  const filteredNutritionItems = availableItems.filter((item) =>
+    item.name.toLowerCase().includes(nutritionSearchQuery.toLowerCase()),
+  );
+
   const itemCount = getItemCount();
+
+  const DIET_OPTIONS = [
+    { id: "high-protein", label: "High Protein", emoji: "💪" },
+    { id: "low-carb", label: "Low Carb", emoji: "🥗" },
+    { id: "vegan", label: "Vegan", emoji: "🌱" },
+    { id: "vegetarian", label: "Vegetarian", emoji: "🥬" },
+    { id: "keto", label: "Keto", emoji: "🥑" },
+    { id: "balanced", label: "Balanced", emoji: "⚖️" },
+    { id: "low-calorie", label: "Low Calorie", emoji: "🍃" },
+    { id: "weight-gain", label: "Weight Gain", emoji: "📈" },
+  ];
+
+  const openDietModal = () => {
+    setSelectedDiet("");
+    setDietRecommendations([]);
+    setDietSummary("");
+    setDietError("");
+    setIsDietModalOpen(true);
+  };
+
+  const fetchDietRecommendations = async () => {
+    if (!selectedDiet) {
+      setDietError("Please select a diet type.");
+      return;
+    }
+
+    try {
+      setDietLoading(true);
+      setDietError("");
+      setDietRecommendations([]);
+      setDietSummary("");
+      const result = await getDietRecommendations(selectedDiet);
+      setDietRecommendations(result.recommendations || []);
+      setDietSummary(result.summary || "");
+    } catch (error: any) {
+      const message =
+        error?.message ||
+        error?.response?.data?.message ||
+        "Failed to get diet recommendations. Try again.";
+      setDietError(message);
+    } finally {
+      setDietLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-20">
@@ -264,17 +411,37 @@ const StudentBooking: React.FC = () => {
               Browse and add items to your cart
             </p>
           </div>
-          <Link
-            to="/user/cart"
-            className="relative p-2 bg-gray-100 rounded-full hover:bg-blue-50 hover:text-blue-600 transition-colors"
-          >
-            <ShoppingBag size={22} />
-            {itemCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
-                {itemCount > 9 ? "9+" : itemCount}
-              </span>
-            )}
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openDietModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-gray-100 hover:bg-green-50 hover:text-green-700 transition-colors text-sm font-medium"
+              disabled={loadingFood || availableItems.length === 0}
+            >
+              <Sparkles size={16} />
+              Diet Check
+            </button>
+            <button
+              type="button"
+              onClick={openNutritionModal}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-colors text-sm font-medium"
+              disabled={loadingFood || availableItems.length === 0}
+            >
+              <Sparkles size={16} />
+              Nutrient Check
+            </button>
+            <Link
+              to="/user/cart"
+              className="relative p-2 bg-gray-100 rounded-full hover:bg-blue-50 hover:text-blue-600 transition-colors"
+            >
+              <ShoppingBag size={22} />
+              {itemCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
+                  {itemCount > 9 ? "9+" : itemCount}
+                </span>
+              )}
+            </Link>
+          </div>
         </div>
 
         {serviceNotice && (
@@ -478,6 +645,237 @@ const StudentBooking: React.FC = () => {
           </div>
         )}
       </section>
+
+      <Modal
+        isOpen={isNutritionModalOpen}
+        onClose={() => setIsNutritionModalOpen(false)}
+        title="AI Nutrient Checker"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setIsNutritionModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={fetchNutritionValues}
+              isLoading={nutritionLoading}
+              disabled={availableItems.length === 0}
+            >
+              Get Nutrients
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Choose available food items to fetch estimated nutrient values using
+            AI.
+          </p>
+
+          {availableItems.length === 0 ? (
+            <div className="text-sm text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
+              No available items found in the current menu.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  value={nutritionSearchQuery}
+                  onChange={(e) => setNutritionSearchQuery(e.target.value)}
+                  placeholder="Search food item by name"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="max-h-40 overflow-y-auto border border-gray-100 rounded-lg p-2 space-y-1">
+                {filteredNutritionItems.map((item) => {
+                  const checked = selectedNutritionItemIds.includes(item.id);
+                  return (
+                    <label
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleNutritionItem(item.id)}
+                          className="accent-blue-600"
+                        />
+                        <span className="text-sm text-gray-800 truncate">
+                          {item.name}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        ₹{item.price}
+                      </span>
+                    </label>
+                  );
+                })}
+
+                {filteredNutritionItems.length === 0 && (
+                  <div className="text-sm text-gray-500 p-2">
+                    No food items match this name.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {bestNutritionItem && (
+            <div className="text-sm text-green-800 bg-green-50 border border-green-100 rounded-lg p-3">
+              <p className="font-semibold">
+                Best among selected: {bestNutritionItem.itemName}
+              </p>
+              <p className="mt-1">{bestNutritionItem.reason}</p>
+            </div>
+          )}
+
+          {nutritionError && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">
+              {nutritionError}
+            </div>
+          )}
+
+          {nutritionNotice && (
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+              {nutritionNotice}
+            </div>
+          )}
+
+          {nutritionValues.length > 0 && (
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {nutritionValues.map((entry, index) => (
+                <div
+                  key={`${entry.itemName}-${index}`}
+                  className="border border-gray-100 rounded-lg p-3 bg-gray-50"
+                >
+                  <p className="text-sm font-semibold text-gray-900 mb-2">
+                    {entry.itemName}
+                  </p>
+                  <div className="grid grid-cols-2 gap-1 text-xs text-gray-700">
+                    <span>Calories: {entry.calories}</span>
+                    <span>Protein: {entry.proteinGrams}g</span>
+                    <span>Carbs: {entry.carbsGrams}g</span>
+                    <span>Fat: {entry.fatGrams}g</span>
+                    <span>Fiber: {entry.fiberGrams}g</span>
+                    <span>Sugar: {entry.sugarGrams}g</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Diet Check Modal */}
+      <Modal
+        isOpen={isDietModalOpen}
+        onClose={() => setIsDietModalOpen(false)}
+        title="AI Diet Check"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setIsDietModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={fetchDietRecommendations}
+              isLoading={dietLoading}
+              disabled={!selectedDiet || dietLoading}
+            >
+              <Sparkles size={16} className="mr-1" />
+              Get Recommendations
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Select your diet type and AI will recommend the best food from the
+            menu for you.
+          </p>
+
+          {/* Diet Type Grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {DIET_OPTIONS.map((diet) => (
+              <button
+                key={diet.id}
+                onClick={() => {
+                  setSelectedDiet(diet.id);
+                  setDietError("");
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left",
+                  selectedDiet === diet.id
+                    ? "bg-green-50 border-green-300 text-green-800 ring-2 ring-green-200"
+                    : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                <span className="text-lg">{diet.emoji}</span>
+                {diet.label}
+              </button>
+            ))}
+          </div>
+
+          {dietError && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">
+              {dietError}
+            </div>
+          )}
+
+          {dietSummary && (
+            <div className="text-sm text-green-800 bg-green-50 border border-green-100 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <Sparkles
+                  size={16}
+                  className="flex-shrink-0 mt-0.5 text-green-600"
+                />
+                <p>{dietSummary}</p>
+              </div>
+            </div>
+          )}
+
+          {dietRecommendations.length > 0 && (
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {dietRecommendations.map((rec, index) => (
+                <div
+                  key={`${rec.id}-${index}`}
+                  className="border border-gray-100 rounded-xl p-3 bg-gray-50 hover:bg-white transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {rec.name}
+                    </p>
+                    {rec.calories_est > 0 && (
+                      <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                        ~{rec.calories_est} cal
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">{rec.reason}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dietLoading && (
+            <div className="flex items-center justify-center py-4 gap-2 text-gray-500">
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm">Finding best options for you...</span>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Floating Cart Bar */}
       {itemCount > 0 && (

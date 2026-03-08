@@ -53,6 +53,13 @@ class ApiResponse {
   static noContent(res) {
     return res.status(204).send();
   }
+
+  /**
+   * Send too many requests response (429)
+   */
+  static tooManyRequests(res, message, data = null) {
+    return res.status(429).json(ApiResponse.error(message, data));
+  }
 }
 
 module.exports = ApiResponse;

@@ -10,6 +10,8 @@ const stockController = require("./stock.controller");
 const financialController = require("./financial.controller");
 const canteenController = require("./canteen.controller");
 const staffController = require("./staff.controller");
+const aiController = require("./ai.controller");
+const feedbackController = require("./feedback.controller");
 
 module.exports = {
   authController,
@@ -24,4 +26,6 @@ module.exports = {
   financialController,
   canteenController,
   staffController,
+  aiController,
+  feedbackController,
 };

@@ -11,6 +11,11 @@ const stockService = require("./stock.service");
 const financialService = require("./financial.service");
 const canteenService = require("./canteen.service");
 const forecastService = require("./forecast.service");
+const aiNutritionService = require("./aiNutrition.service");
+const aiRecommendationService = require("./aiRecommendation.service");
+const aiChatService = require("./aiChat.service");
+const aiInventoryService = require("./aiInventory.service");
+const aiQueueService = require("./aiQueue.service");
 
 module.exports = {
   authService,
@@ -26,4 +31,9 @@ module.exports = {
   financialService,
   canteenService,
   forecastService,
+  aiNutritionService,
+  aiRecommendationService,
+  aiChatService,
+  aiInventoryService,
+  aiQueueService,
 };

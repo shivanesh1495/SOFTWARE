@@ -13,6 +13,8 @@ const Canteen = require('./Canteen');
 const AcademicCalendar = require('./AcademicCalendar');
 const ForecastConfig = require('./ForecastConfig');
 const SurplusDonation = require('./SurplusDonation');
+const StockItem = require('./StockItem');
+const StockTransaction = require('./StockTransaction');
 
 module.exports = {
   User,
@@ -30,4 +32,6 @@ module.exports = {
   AcademicCalendar,
   ForecastConfig,
   SurplusDonation,
+  StockItem,
+  StockTransaction,
 };

@@ -41,6 +41,11 @@ api.interceptors.response.use(
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
+    // Allow 429 (Too Many Requests) to pass through with data
+    // The AI service will return a proper error message in the response
+    if (error.response?.status === 429) {
+      return Promise.resolve(error.response);
+    }
     return Promise.reject(error);
   },
 );

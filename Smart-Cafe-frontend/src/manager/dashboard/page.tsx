@@ -9,6 +9,7 @@ import StaffControls from "./components/StaffControls";
 import NotificationCenter from "./components/NotificationCenter";
 import SystemHealth from "./components/SystemHealth";
 import { getCanteens, type Canteen } from "../../services/canteen.service";
+import { AIInventoryInsights } from "./components/AIInventoryInsights";
 
 const STORAGE_KEY = "manager_selected_canteen";
 
@@ -139,6 +140,9 @@ const ManagerDashboard: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* AI Smart Insights Row */}
+      <AIInventoryInsights key={`ai-${refreshKey}`} />
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

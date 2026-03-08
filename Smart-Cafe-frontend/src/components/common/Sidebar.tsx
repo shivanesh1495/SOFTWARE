@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../store/auth.store";
 import {
   LayoutDashboard,
@@ -15,11 +15,14 @@ import {
   Settings,
   Database,
   Store,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 
 const Sidebar: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (!user) return null;
 
@@ -85,6 +88,7 @@ const Sidebar: React.FC = () => {
             icon: Settings,
           },
           { to: "/admin/system", label: "System Maintenance", icon: Database },
+          { to: "/admin/feedback", label: "Feedback Analysis", icon: MessageSquare },
         ];
       default:
         console.warn("Unknown role:", user.role);
@@ -95,25 +99,26 @@ const Sidebar: React.FC = () => {
   const links = getLinks();
 
   return (
-    <aside className="w-64 bg-slate-900 fixed top-16 left-0 h-[calc(100vh-4rem)] flex-shrink-0 text-white overflow-y-auto">
+    <aside className="w-64 bg-slate-900 fixed top-16 left-0 h-[calc(100vh-4rem)] flex-shrink-0 text-white overflow-y-auto z-40">
       <div className="p-4 space-y-1">
-        {links.map((link) => (
-          <NavLink
-            key={link.to}
-            to={link.to}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
+        {links.map((link) => {
+          const isActive = location.pathname.startsWith(link.to);
+          return (
+            <button
+              key={link.to}
+              onClick={() => navigate(link.to)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                 isActive
                   ? "bg-black text-white"
                   : "text-slate-400 hover:bg-slate-800 hover:text-slate-100",
-              )
-            }
-          >
-            <link.icon size={20} />
-            {link.label}
-          </NavLink>
-        ))}
+              )}
+            >
+              <link.icon size={20} />
+              {link.label}
+            </button>
+          );
+        })}
       </div>
     </aside>
   );

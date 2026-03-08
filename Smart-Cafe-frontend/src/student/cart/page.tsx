@@ -8,9 +8,14 @@ import {
   ShoppingBag,
   Minus,
   Plus,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { useCart } from "../../store/cart.store";
+import Modal from "../../components/common/Modal";
+import { getNutritionForItems } from "../../services/nutrition.service";
+import type { NutritionResponse } from "../../services/nutrition.service";
+import toast from "react-hot-toast";
 
 const StudentCart: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +30,51 @@ const StudentCart: React.FC = () => {
 
   const totalPrice = getTotal();
   const totalItems = getItemCount();
+
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [showNutritionModal, setShowNutritionModal] = React.useState(false);
+  const [nutritionData, setNutritionData] =
+    React.useState<NutritionResponse | null>(null);
+
+  const handleAnalyzeNutrition = async () => {
+    if (cartItems.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+      const itemNames = cartItems.map((item) => item.name);
+      const data = await getNutritionForItems(itemNames);
+      setNutritionData(data);
+      setShowNutritionModal(true);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to analyze nutrition");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const totalNutritionalInfo = React.useMemo(() => {
+    if (!nutritionData) return null;
+
+    let calories = 0;
+    let protein = 0;
+    let carbs = 0;
+    let fat = 0;
+
+    nutritionData.items.forEach((item) => {
+      const cartItem = cartItems.find((ci) => ci.name === item.itemName);
+      const qty = cartItem ? cartItem.quantity : 1;
+
+      calories += item.calories * qty;
+      protein += item.proteinGrams * qty;
+      carbs += item.carbsGrams * qty;
+      fat += item.fatGrams * qty;
+    });
+
+    return { calories, protein, carbs, fat };
+  }, [nutritionData, cartItems]);
 
   return (
     <div className="pb-28 space-y-6">
@@ -153,6 +203,20 @@ const StudentCart: React.FC = () => {
               <span>Total</span>
               <span className="text-lg">₹{totalPrice}</span>
             </div>
+
+            <div className="pt-2">
+              <Button
+                variant="secondary"
+                className="w-full flex items-center justify-center gap-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+                onClick={handleAnalyzeNutrition}
+                isLoading={isAnalyzing}
+              >
+                {!isAnalyzing && (
+                  <Sparkles size={18} className="text-purple-600" />
+                )}
+                <span>Analyze Meal with AI</span>
+              </Button>
+            </div>
           </section>
 
           {/* Footer Actions */}
@@ -182,6 +246,91 @@ const StudentCart: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* AI Nutrition Modal */}
+          <Modal
+            isOpen={showNutritionModal}
+            onClose={() => setShowNutritionModal(false)}
+            title="AI Nutrition Analysis"
+          >
+            {nutritionData && totalNutritionalInfo ? (
+              <div className="space-y-6">
+                {/* Total Stats */}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    Total Estimated Cart Values
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-orange-50 p-4 rounded-xl text-center border border-orange-100">
+                      <span className="block text-2xl font-black text-orange-600">
+                        {totalNutritionalInfo.calories.toFixed(0)}
+                      </span>
+                      <span className="text-xs font-semibold text-orange-800 uppercase">
+                        Calories
+                      </span>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-xl text-center border border-blue-100">
+                      <span className="block text-2xl font-black text-blue-600">
+                        {totalNutritionalInfo.protein.toFixed(1)}g
+                      </span>
+                      <span className="text-xs font-semibold text-blue-800 uppercase">
+                        Protein
+                      </span>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-xl text-center border border-green-100">
+                      <span className="block text-2xl font-black text-green-600">
+                        {totalNutritionalInfo.carbs.toFixed(1)}g
+                      </span>
+                      <span className="text-xs font-semibold text-green-800 uppercase">
+                        Carbs
+                      </span>
+                    </div>
+                    <div className="bg-yellow-50 p-4 rounded-xl text-center border border-yellow-100">
+                      <span className="block text-2xl font-black text-yellow-600">
+                        {totalNutritionalInfo.fat.toFixed(1)}g
+                      </span>
+                      <span className="text-xs font-semibold text-yellow-800 uppercase">
+                        Fat
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Best Item Suggestion */}
+                {nutritionData.bestItem && (
+                  <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles size={16} className="text-purple-600" />
+                      <h4 className="font-bold text-purple-900">
+                        Top Pick: {nutritionData.bestItem.itemName}
+                      </h4>
+                    </div>
+                    <p className="text-sm text-purple-800 leading-relaxed">
+                      {nutritionData.bestItem.reason}
+                    </p>
+                  </div>
+                )}
+
+                {/* Info Note */}
+                <div className="bg-gray-50 p-3 rounded-lg text-xs text-gray-600 leading-snug">
+                  {nutritionData.fallback
+                    ? "🤖 " +
+                      (nutritionData.note ||
+                        "Showing approximate local values.")
+                    : "✨ Values are AI-generated estimates and may vary from actual preparation."}
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-gray-500">
+                Failed to load data.
+              </div>
+            )}
+            <div className="mt-6 flex justify-end">
+              <Button onClick={() => setShowNutritionModal(false)}>
+                Got it
+              </Button>
+            </div>
+          </Modal>
         </>
       )}
     </div>

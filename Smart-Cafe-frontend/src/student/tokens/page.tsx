@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Clock, Filter, ArrowDownUp, QrCode, RefreshCw, X } from "lucide-react";
+import { Calendar, Clock, Filter, ArrowDownUp, QrCode, RefreshCw, X, MessageSquare, Star } from "lucide-react";
 import toast from "react-hot-toast";
 import Button from "../../components/common/Button";
 import Loader from "../../components/common/Loader";
@@ -11,6 +11,7 @@ import {
   type Booking,
   type Slot,
 } from "../../services/booking.service";
+import { submitFeedback } from "../../services/feedback.service";
 import {
   getPublicSettings,
   type PublicSettings,
@@ -74,6 +75,12 @@ const StudentTokens: React.FC = () => {
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
   const [rescheduling, setRescheduling] = useState(false);
+
+  // Feedback State
+  const [feedbackBookingId, setFeedbackBookingId] = useState<string | null>(null);
+  const [rating, setRating] = useState<number>(5);
+  const [comment, setComment] = useState("");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   const loadTokens = useCallback(async () => {
     setLoading(true);
@@ -312,6 +319,22 @@ const StudentTokens: React.FC = () => {
                         </div>
                       </Button>
                     </Link>
+                    {(booking.status === "completed" || expired) && booking.status !== "cancelled" && booking.status !== "no_show" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setFeedbackBookingId(booking.id);
+                          setRating(5);
+                          setComment("");
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <MessageSquare size={14} />
+                          Review
+                        </div>
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -375,6 +398,71 @@ const StudentTokens: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {feedbackBookingId && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">How was your meal?</h3>
+              <button 
+                onClick={() => setFeedbackBookingId(null)} 
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
+                disabled={submittingFeedback}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-5">
+              {/* Star Rating */}
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    className={`p-2 rounded-full transition-all duration-200 hover:scale-110 ${rating >= star ? 'text-amber-400' : 'text-gray-200'}`}
+                  >
+                    <Star size={36} fill={rating >= star ? "currentColor" : "none"} strokeWidth={rating >= star ? 0 : 2} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Comment Box */}
+              <div>
+                <textarea
+                  className="w-full border border-gray-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-brand focus:border-transparent outline-none resize-none bg-gray-50 placeholder:text-gray-400"
+                  rows={4}
+                  placeholder="Share a recipe suggestion, tell us about the wait time, or review the food quality..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                ></textarea>
+              </div>
+
+              <Button
+                className="w-full py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all"
+                disabled={!comment.trim()}
+                isLoading={submittingFeedback}
+                onClick={async () => {
+                  setSubmittingFeedback(true);
+                  try {
+                    await submitFeedback(feedbackBookingId, rating, comment);
+                    toast.success("Thank you! Your feedback helps us improve. 💖");
+                    setFeedbackBookingId(null);
+                  } catch (err: any) {
+                    toast.error(err?.response?.data?.message || "Failed to submit feedback");
+                  } finally {
+                    setSubmittingFeedback(false);
+                  }
+                }}
+              >
+                Submit Feedback
+              </Button>
+            </div>
           </div>
         </div>
       )}

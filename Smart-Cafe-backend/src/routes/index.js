@@ -17,6 +17,8 @@ const stockRoutes = require("./stock.routes");
 const financialRoutes = require("./financial.routes");
 const canteenRoutes = require("./canteen.routes");
 const staffRoutes = require("./staff.routes");
+const aiRoutes = require("./ai.routes");
+const feedbackRoutes = require("./feedback.routes");
 
 // Health check
 router.get("/health", (req, res) => {
@@ -46,5 +48,7 @@ router.use("/canteens", canteenRoutes);
 router.use("/staff", staffRoutes);
 router.use("/alerts", require("./alert.routes"));
 router.use("/calendar", require("./calendar.routes"));
+router.use("/ai", aiRoutes);
+router.use("/feedback", feedbackRoutes);
 
 module.exports = router;
