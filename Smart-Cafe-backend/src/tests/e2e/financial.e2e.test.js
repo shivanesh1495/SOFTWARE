@@ -6,6 +6,7 @@
 const request = require("supertest");
 const app = require("../../app");
 const FinancialTransaction = require("../../models/FinancialTransaction");
+const { User, Canteen } = require("../../models");
 
 const createUserAndLogin = async (data) => {
   await request(app).post("/api/auth/register").send(data);
@@ -174,6 +175,47 @@ describe("Financial Management E2E Integration", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       expect(res.status).toBe(200);
+    });
+
+    it("should include manual staff cash entry in canteen manager summary", async () => {
+      const staffEmail = "cashstaff@cafe.com";
+      const staffToken = await createUserAndLogin({
+        fullName: "Cash Staff",
+        email: staffEmail,
+        password: "staff12345",
+        role: "canteen_staff",
+      });
+
+      const canteen = await Canteen.create({
+        name: "Test Canteen",
+        capacity: 120,
+      });
+
+      await User.findOneAndUpdate(
+        { email: staffEmail },
+        { canteenId: canteen._id },
+      );
+
+      const cashAmount = 130;
+      const cashRes = await request(app)
+        .post("/api/staff/cash")
+        .set("Authorization", `Bearer ${staffToken}`)
+        .send({ amount: cashAmount });
+
+      expect(cashRes.status).toBe(201);
+
+      const summaryRes = await request(app)
+        .get(`/api/financial/summary/daily?canteenId=${canteen._id.toString()}`)
+        .set("Authorization", `Bearer ${managerToken}`);
+
+      expect(summaryRes.status).toBe(200);
+      expect(summaryRes.body.data.totalRevenue).toBe(cashAmount);
+
+      const cashBucket = summaryRes.body.data.byPaymentMethod.find(
+        (row) => row._id === "CASH",
+      );
+      expect(cashBucket).toBeDefined();
+      expect(cashBucket.total).toBe(cashAmount);
     });
   });
 

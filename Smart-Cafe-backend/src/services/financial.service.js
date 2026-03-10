@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const FinancialTransaction = require("../models/FinancialTransaction");
 const { Booking } = require("../models");
 const {
@@ -6,6 +7,30 @@ const {
   getDayBounds,
 } = require("../utils/helpers");
 const ApiError = require("../utils/ApiError");
+
+const normalizeCanteenId = (canteenId) => {
+  if (!canteenId) return null;
+  if (typeof canteenId === "string") return canteenId;
+  if (typeof canteenId.toString === "function") return canteenId.toString();
+  return String(canteenId);
+};
+
+const buildCanteenFilter = (canteenId) => {
+  const normalizedId = normalizeCanteenId(canteenId);
+  if (!normalizedId) return null;
+
+  // Support legacy docs that may have stored ObjectId instead of string.
+  if (mongoose.Types.ObjectId.isValid(normalizedId)) {
+    return {
+      $or: [
+        { canteenId: normalizedId },
+        { canteenId: new mongoose.Types.ObjectId(normalizedId) },
+      ],
+    };
+  }
+
+  return { canteenId: normalizedId };
+};
 
 /**
  * Get all financial transactions with filters
@@ -17,7 +42,9 @@ const getTransactions = async (query) => {
   if (query.transactionType) filter.transactionType = query.transactionType;
   if (query.category) filter.category = query.category;
   if (query.status) filter.status = query.status;
-  if (query.canteenId) filter.canteenId = query.canteenId;
+  if (query.canteenId) {
+    Object.assign(filter, buildCanteenFilter(query.canteenId));
+  }
   if (query.startDate || query.endDate) {
     filter.date = {};
     if (query.startDate) filter.date.$gte = new Date(query.startDate);
@@ -79,6 +106,8 @@ const recordBookingSale = async (booking) => {
  * Record cash sale for immediate walkins / scanned tokens
  */
 const recordCashSale = async (amount, description, canteenId, staffId) => {
+  const normalizedCanteenId = normalizeCanteenId(canteenId);
+
   return await FinancialTransaction.create({
     transactionType: "SALE",
     amount: Math.abs(amount),
@@ -86,7 +115,7 @@ const recordCashSale = async (amount, description, canteenId, staffId) => {
     category: "BOOKING",
     paymentMethod: "CASH",
     status: "COMPLETED",
-    canteenId: canteenId || "default",
+    canteenId: normalizedCanteenId || "default",
     performedBy: staffId,
   });
 };
@@ -133,7 +162,7 @@ const getDailySummary = async (date, canteenId) => {
   // Build base match filter
   const baseMatch = { date: { $gte: start, $lte: end }, status: "COMPLETED" };
   if (canteenId) {
-    baseMatch.canteenId = canteenId;
+    Object.assign(baseMatch, buildCanteenFilter(canteenId));
   }
 
   const [summary, byCategory, byPaymentMethod] = await Promise.all([

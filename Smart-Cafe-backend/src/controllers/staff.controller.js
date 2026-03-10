@@ -157,27 +157,39 @@ const logManualCash = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "Staff user not found");
   }
 
-  // Admin users might not have a canteenId, or they can log for a specific canteen if passed. 
+  // Admin users might not have a canteenId, or they can log for a specific canteen if passed.
   // Assuming this is used by canteen_staff who have a `canteenId`.
   const targetCanteenId = staffUser.canteenId;
-  if (!targetCanteenId && staffUser.role !== 'admin') {
-    return ApiResponse.badRequest(res, "Staff member is not assigned to any canteen");
+  if (!targetCanteenId && staffUser.role !== "admin") {
+    return ApiResponse.badRequest(
+      res,
+      "Staff member is not assigned to any canteen",
+    );
   }
+
+  const canteenIdString = targetCanteenId ? targetCanteenId.toString() : null;
+  const staffName = staffUser.fullName || staffUser.name || "Staff";
 
   await financialService.recordCashSale(
     amount,
-    `Manual cash entry by staff ${staffUser.name}`,
-    targetCanteenId,
-    staffUser._id
+    `Manual cash entry by staff ${staffName}`,
+    canteenIdString,
+    staffUser._id,
   );
 
-  // Emit websocket event so the manager dashboard updates immediately
-  if (targetCanteenId) {
-    getIO().to(targetCanteenId.toString()).emit("booking:updated", {
+  // Emit websocket event so dashboards refresh immediately.
+  const io = getIO();
+  if (io && canteenIdString) {
+    const payload = {
       action: "cash_entry",
       amount,
-      canteenId: targetCanteenId,
-    });
+      canteenId: canteenIdString,
+      source: "staff_manual_cash",
+    };
+
+    io.to(canteenIdString).emit("booking:updated", payload);
+    io.to("role:manager").emit("booking:updated", payload);
+    io.to("role:admin").emit("booking:updated", payload);
   }
 
   ApiResponse.created(res, "Cash entry logged successfully");
