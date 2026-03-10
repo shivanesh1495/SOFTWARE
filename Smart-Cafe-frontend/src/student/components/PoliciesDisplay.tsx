@@ -43,8 +43,8 @@ export const PoliciesDisplay: React.FC<PoliciesDisplayProps> = ({
         <div className="flex items-center gap-2">
           <AlertCircle size={16} className="text-orange-500" />
           <span>
-            <strong>No-show penalty:</strong> {p.noShowPenaltyDays} days ban
-            after no-show
+            <strong>No-show policy Rule:</strong> {p.noShowPenaltyDays} days ban
+            after a no-show
           </span>
         </div>
 

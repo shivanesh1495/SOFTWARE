@@ -4,8 +4,10 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
 } from "react";
 import type { ReactNode } from "react";
+import { useAuth } from "./auth.store";
 
 export interface CartItem {
   id: string;
@@ -28,29 +30,43 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const CART_STORAGE_KEY = "smart-cafe-cart";
-
-const loadCart = (): CartItem[] => {
-  try {
-    const stored = localStorage.getItem(CART_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveCart = (items: CartItem[]) => {
-  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
-};
-
 export const CartProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [items, setItems] = useState<CartItem[]>(loadCart);
+  const { user } = useAuth();
 
+  // Generate a unique storage key per user
+  const storageKey = useMemo(() => {
+    // Determine userId from the auth state
+    const userId = user?.id || (user as any)?._id || "guest";
+    return `smart-cafe-cart-${userId}`;
+  }, [user]);
+
+  // Initialize with empty array, then populate with correct user's cart
+  const [items, setItems] = useState<CartItem[]>([]);
+
+  // When storage key changes (user logs in/out), load the respective cart
   useEffect(() => {
-    saveCart(items);
-  }, [items]);
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        setItems(JSON.parse(stored));
+      } else {
+        setItems([]);
+      }
+    } catch {
+      setItems([]);
+    }
+  }, [storageKey]);
+
+  // Setup save to storage whenever items or user changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(items));
+    } catch (error) {
+      console.error("Error saving cart to local storage", error);
+    }
+  }, [items, storageKey]);
 
   const addItem = useCallback(
     (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
