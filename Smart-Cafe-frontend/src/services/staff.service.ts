@@ -91,6 +91,14 @@ const staffService = {
     const response = await api.get("/staff/queue-status");
     return response.data;
   },
+
+  /**
+   * Log quick manual cash entry from the sidebar
+   */
+  logManualCash: async (amount: number) => {
+    const response = await api.post("/staff/cash", { amount });
+    return response.data;
+  },
 };
 
 export default staffService;

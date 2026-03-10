@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../store/auth.store";
 import {
@@ -17,15 +17,37 @@ import {
   Database,
   Store,
   Package,
+  DollarSign,
+  Loader2,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
+import staffService from "../../services/staff.service";
+import toast from "react-hot-toast";
 
 const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [cashAmount, setCashAmount] = useState<string>("");
+  const [loggingCash, setLoggingCash] = useState(false);
+
   if (!user) return null;
+
+  const handleLogCash = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashAmount || Number(cashAmount) <= 0) return;
+    try {
+      setLoggingCash(true);
+      await staffService.logManualCash(Number(cashAmount));
+      toast.success("Cash logged successfully");
+      setCashAmount("");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to log cash");
+    } finally {
+      setLoggingCash(false);
+    }
+  };
 
   const getLinks = () => {
     switch (user.role) {
@@ -126,6 +148,45 @@ const Sidebar: React.FC = () => {
           );
         })}
       </div>
+
+      {user.role === "canteen_staff" && (
+        <div className="absolute bottom-6 left-4 right-4">
+          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Quick Cash Entry
+            </h4>
+            <form onSubmit={handleLogCash} className="space-y-2">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Amount"
+                  value={cashAmount}
+                  onChange={(e) => setCashAmount(e.target.value)}
+                  disabled={loggingCash}
+                  className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:opacity-50"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={!cashAmount || Number(cashAmount) <= 0 || loggingCash}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:text-slate-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {loggingCash ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  <DollarSign size={16} />
+                )}
+                Add Cash
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

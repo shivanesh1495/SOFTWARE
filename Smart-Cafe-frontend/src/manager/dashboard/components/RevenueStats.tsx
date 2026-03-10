@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -13,6 +13,7 @@ import {
   getTransactions,
   type DailySummary,
 } from "../../../services/financial.service";
+import { useRealtimeRefresh } from "../../../hooks/useRealtimeRefresh";
 
 interface Props {
   canteenId?: string;
@@ -23,24 +24,27 @@ const RevenueStats: React.FC<Props> = ({ canteenId }) => {
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [unsettledCount, setUnsettledCount] = useState(0);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const [daily, pending] = await Promise.all([
-          getDailySummary({ canteenId }).catch(() => null),
-          getTransactions({ status: "PENDING" }).catch(() => null),
-        ]);
-        if (daily) setSummary(daily);
-        if (pending) setUnsettledCount(pending.total || 0);
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [daily, pending] = await Promise.all([
+        getDailySummary({ canteenId }).catch(() => null),
+        getTransactions({ status: "PENDING" }).catch(() => null),
+      ]);
+      if (daily) setSummary(daily);
+      if (pending) setUnsettledCount(pending.total || 0);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
   }, [canteenId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useRealtimeRefresh(["booking:updated"], load);
 
   const totalRevenue = summary?.totalRevenue || 0;
   const digitalTotal =

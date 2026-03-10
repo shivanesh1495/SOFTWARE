@@ -1,4 +1,6 @@
-const { Booking, Notification } = require("../models");
+const { Booking, Notification, User } = require("../models");
+const financialService = require("../services/financial.service");
+const { getIO } = require("../socket");
 const catchAsync = require("../utils/catchAsync");
 const ApiResponse = require("../utils/ApiResponse");
 
@@ -140,8 +142,50 @@ const getQueueStatus = catchAsync(async (req, res) => {
   });
 });
 
+/**
+ * Log quick manual cash entry from the sidebar
+ * POST /api/staff/cash
+ */
+const logManualCash = catchAsync(async (req, res) => {
+  const { amount } = req.body;
+  if (!amount || amount <= 0) {
+    return ApiResponse.badRequest(res, "Amount must be greater than zero");
+  }
+
+  const staffUser = await User.findById(req.userId);
+  if (!staffUser) {
+    return ApiResponse.notFound(res, "Staff user not found");
+  }
+
+  // Admin users might not have a canteenId, or they can log for a specific canteen if passed. 
+  // Assuming this is used by canteen_staff who have a `canteenId`.
+  const targetCanteenId = staffUser.canteenId;
+  if (!targetCanteenId && staffUser.role !== 'admin') {
+    return ApiResponse.badRequest(res, "Staff member is not assigned to any canteen");
+  }
+
+  await financialService.recordCashSale(
+    amount,
+    `Manual cash entry by staff ${staffUser.name}`,
+    targetCanteenId,
+    staffUser._id
+  );
+
+  // Emit websocket event so the manager dashboard updates immediately
+  if (targetCanteenId) {
+    getIO().to(targetCanteenId.toString()).emit("booking:updated", {
+      action: "cash_entry",
+      amount,
+      canteenId: targetCanteenId,
+    });
+  }
+
+  ApiResponse.created(res, "Cash entry logged successfully");
+});
+
 module.exports = {
   sendAnnouncement,
   getAnnouncements,
   getQueueStatus,
+  logManualCash,
 };

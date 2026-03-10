@@ -14,4 +14,7 @@ router.post("/announcement", staffController.sendAnnouncement);
 // Queue monitoring
 router.get("/queue-status", staffController.getQueueStatus);
 
+// Manual cash entry
+router.post("/cash", staffController.logManualCash);
+
 module.exports = router;
