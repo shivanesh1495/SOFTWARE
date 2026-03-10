@@ -15,7 +15,6 @@ import {
   RefreshCw,
   ChevronDown,
   Utensils,
-  AlertCircle,
   AlertTriangle,
   Package,
 } from "lucide-react";
@@ -168,7 +167,7 @@ const StudentSustainability: React.FC = () => {
         sustainabilityService.getSustainabilityMetrics().catch(() => null),
         sustainabilityService
           .getMyWasteReports({ limit: 10, page: 1 })
-          .catch(() => ({ reports: [], total: 0 })),
+          .catch(() => ({ reports: [], total: 0, hasNextPage: false })),
         sustainabilityService.getDonationHistory({ limit: 10 }).catch(() => []),
         canteenService.getCanteens({ isActive: true }).catch(() => []),
         getPublicSettings().catch(() => null),

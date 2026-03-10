@@ -53,6 +53,7 @@ const CanteenStaffMenuQuantity = React.lazy(
 
 const ManagerDashboard = React.lazy(() => import("./manager/dashboard/page"));
 const ManagerForecasts = React.lazy(() => import("./manager/forecasts/page"));
+const ManagerSimulator = React.lazy(() => import("./manager/simulator/page"));
 
 const AdminDashboard = React.lazy(() => import("./admin/dashboard/page"));
 const AdminMenu = React.lazy(() => import("./admin/menu/page"));
@@ -160,6 +161,10 @@ function App() {
                     <Route
                       path="/manager/forecasts"
                       element={<ManagerForecasts />}
+                    />
+                    <Route
+                      path="/manager/simulator"
+                      element={<ManagerSimulator />}
                     />
                   </Route>
 

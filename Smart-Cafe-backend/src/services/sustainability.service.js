@@ -57,6 +57,36 @@ const getUserWasteReports = async (userId, query = {}) => {
 };
 
 /**
+ * Get all waste reports (Admin/Manager)
+ */
+const getAllWasteReports = async (query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
+  const { startDate, endDate, mealType } = query;
+  
+  const filter = {};
+  if (startDate && endDate) {
+    filter.date = {
+      $gte: new Date(startDate),
+      $lte: new Date(endDate),
+    };
+  }
+  if (mealType) {
+    filter.mealType = mealType;
+  }
+  
+  const [reports, total] = await Promise.all([
+    WasteReport.find(filter)
+      .populate('user', 'name fullName email studentId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    WasteReport.countDocuments(filter),
+  ]);
+  
+  return paginateResponse(reports, total, page, limit);
+};
+
+/**
  * Get waste statistics (Admin/Manager)
  */
 const getWasteStats = async (query = {}) => {
@@ -343,6 +373,7 @@ const getDonationHistory = async (query = {}) => {
 module.exports = {
   submitWasteReport,
   getUserWasteReports,
+  getAllWasteReports,
   getWasteStats,
   getSustainabilityMetrics,
   refreshEcoScores,

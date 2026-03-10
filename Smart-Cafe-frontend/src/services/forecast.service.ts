@@ -198,11 +198,13 @@ export const recordActual = async (
   date: string,
   mealType: string,
   actualCount: number,
+  canteenId?: string,
 ): Promise<MealForecast> => {
   const response = await api.post("/forecast/record-actual", {
     date,
     mealType,
     actualCount,
+    canteenId,
   });
   return response.data.data;
 };

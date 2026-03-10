@@ -1385,3 +1385,8 @@ Date,Day_of_Week,Meal_Type,Main_Dish,Is_Veg,Event_Context,Weather,Qty_Prepared,Q
 31-05-2026,SUN,LUNCH,Chicken Biryani,False,Summer_Vacation,Hot,5,5,0
 31-05-2026,SUN,DINNER,Prawn Masala,False,Summer_Vacation,Hot,5,5,0
 31-05-2026,SUN,DINNER,Curd Rice,True,Summer_Vacation,Hot,5,4,1
+
+10-03-2026,TUE,BREAKFAST,AutoExport_BREAKFAST,True,Normal,Sunny,,79,
+10-03-2026,TUE,DINNER,AutoExport_DINNER,True,Normal,Sunny,,65,
+10-03-2026,TUE,LUNCH,AutoExport_LUNCH,True,Normal,Sunny,,95,
+10-03-2026,TUE,SNACKS,AutoExport_SNACKS,True,Normal,Sunny,,84,

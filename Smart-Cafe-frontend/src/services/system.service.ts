@@ -39,6 +39,19 @@ export interface PublicSettings {
   tokenExpiryMins: number;
   portionSize: "Standard" | "Small";
   surplusDonationEnabled: boolean;
+  // NEW: Policies set by admin
+  policies?: {
+    maxBookingsPerDay: number;
+    peakBookingWindowMins: number;
+    tokenExpiryMins: number;
+    noShowGraceMins: number;
+    noShowPenaltyDays: number;
+    ricePortionLimitG: number;
+    curryPortionLimitMl: number;
+    maxCapacityPerSlot: number;
+    facultyReservedSlots: number;
+    guestReservedSlots: number;
+  };
 }
 
 // ========== SETTINGS ENDPOINTS ==========

@@ -39,6 +39,15 @@ const getMyWasteReports = catchAsync(async (req, res) => {
 });
 
 /**
+ * Get all waste reports (Admin/Manager)
+ * GET /api/sustainability/reports
+ */
+const getAllWasteReports = catchAsync(async (req, res) => {
+  const result = await sustainabilityService.getAllWasteReports(req.query);
+  ApiResponse.ok(res, "All waste reports retrieved", result);
+});
+
+/**
  * Get waste statistics (Admin/Manager)
  * GET /api/sustainability/stats
  */
@@ -83,6 +92,7 @@ const getDonationHistory = catchAsync(async (req, res) => {
 module.exports = {
   submitWasteReport,
   getMyWasteReports,
+  getAllWasteReports,
   getWasteStats,
   getSustainabilityMetrics,
   logDonation,

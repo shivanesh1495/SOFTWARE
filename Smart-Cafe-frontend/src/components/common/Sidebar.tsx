@@ -12,6 +12,7 @@ import {
   UserPlus,
   Megaphone,
   TrendingUp,
+  Activity,
   Settings,
   Database,
   Store,
@@ -78,6 +79,7 @@ const Sidebar: React.FC = () => {
             icon: LayoutDashboard,
           },
           { to: "/manager/forecasts", label: "Forecasts", icon: TrendingUp },
+          { to: "/manager/simulator", label: "Simulator", icon: Activity },
         ];
       case "admin":
         return [

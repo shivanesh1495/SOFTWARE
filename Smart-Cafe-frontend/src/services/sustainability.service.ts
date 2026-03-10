@@ -77,6 +77,37 @@ export const getMyWasteReports = async (params?: {
 // ========== MANAGEMENT ENDPOINTS ==========
 
 /**
+ * Get all waste reports (Management only)
+ */
+export const getAllWasteReports = async (params?: {
+  startDate?: string;
+  endDate?: string;
+  mealType?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{
+  reports: WasteReport[];
+  total: number;
+  hasNextPage?: boolean;
+  page?: number;
+}> => {
+  const response = await api.get("/sustainability/reports", { params });
+  const data = response.data.data;
+  if (data?.items) {
+    return {
+      reports: data.items,
+      total: data.pagination?.total ?? data.items.length,
+      hasNextPage: data.pagination?.hasNextPage ?? false,
+      page: data.pagination?.page ?? 1,
+    };
+  }
+  return {
+    reports: data?.reports || data?.data || [],
+    total: data?.total ?? 0,
+  };
+};
+
+/**
  * Get waste statistics (Management only)
  */
 export const getWasteStats = async (params?: {

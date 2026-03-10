@@ -59,18 +59,23 @@ const AdminCapacity: React.FC = () => {
         map[s.settingKey] = s.settingValue;
       });
 
+      const parseSetting = (val: string | undefined, defaultVal: number) => {
+        if (val === undefined || val === null || val === "") return defaultVal;
+        const parsed = parseInt(val);
+        return isNaN(parsed) ? defaultVal : parsed;
+      };
+
       setPolicies({
-        maxBookingsPerDay: parseInt(map[POLICY_KEYS.maxBookingsPerDay]) || 2,
-        peakBookingWindow: parseInt(map[POLICY_KEYS.peakBookingWindow]) || 30,
-        tokenExpiry: parseInt(map[POLICY_KEYS.tokenExpiry]) || 60,
-        noShowGrace: parseInt(map[POLICY_KEYS.noShowGrace]) || 15,
-        noShowPenalty: parseInt(map[POLICY_KEYS.noShowPenalty]) || 7,
-        ricePortionLimit: parseInt(map[POLICY_KEYS.ricePortionLimit]) || 250,
-        curryPortionLimit: parseInt(map[POLICY_KEYS.curryPortionLimit]) || 150,
-        maxCapacityPerSlot:
-          parseInt(map[POLICY_KEYS.maxCapacityPerSlot]) || 200,
-        facultyReserved: parseInt(map[POLICY_KEYS.facultyReserved]) || 50,
-        guestReserved: parseInt(map[POLICY_KEYS.guestReserved]) || 20,
+        maxBookingsPerDay: parseSetting(map[POLICY_KEYS.maxBookingsPerDay], 2),
+        peakBookingWindow: parseSetting(map[POLICY_KEYS.peakBookingWindow], 30),
+        tokenExpiry: parseSetting(map[POLICY_KEYS.tokenExpiry], 60),
+        noShowGrace: parseSetting(map[POLICY_KEYS.noShowGrace], 15),
+        noShowPenalty: parseSetting(map[POLICY_KEYS.noShowPenalty], 7),
+        ricePortionLimit: parseSetting(map[POLICY_KEYS.ricePortionLimit], 250),
+        curryPortionLimit: parseSetting(map[POLICY_KEYS.curryPortionLimit], 150),
+        maxCapacityPerSlot: parseSetting(map[POLICY_KEYS.maxCapacityPerSlot], 200),
+        facultyReserved: parseSetting(map[POLICY_KEYS.facultyReserved], 50),
+        guestReserved: parseSetting(map[POLICY_KEYS.guestReserved], 20),
       });
     } catch {
       toast.error("Failed to load policy settings");

@@ -52,11 +52,17 @@ const AdminSettings: React.FC = () => {
         map[s.settingKey] = s.settingValue;
       });
 
+      const parseSetting = (val: string | undefined, defaultVal: number) => {
+        if (val === undefined || val === null || val === "") return defaultVal;
+        const parsed = parseInt(val);
+        return isNaN(parsed) ? defaultVal : parsed;
+      };
+
       setConfig({
         maintenanceMode: map[SETTING_KEYS.maintenanceMode] === "true",
         publicRegistration: map[SETTING_KEYS.publicRegistration] !== "false",
         betaFeatures: map[SETTING_KEYS.betaFeatures] === "true",
-        reminderTime: parseInt(map[SETTING_KEYS.reminderTime]) || 30,
+        reminderTime: parseSetting(map[SETTING_KEYS.reminderTime], 30),
         digestTime: map[SETTING_KEYS.digestTime] || "09:00",
         semStart: map[SETTING_KEYS.semStart] || "2024-01-01",
         semEnd: map[SETTING_KEYS.semEnd] || "2024-05-31",

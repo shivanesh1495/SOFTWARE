@@ -6,7 +6,6 @@ import {
   Loader2,
   TrendingUp,
   RefreshCw,
-  AlertCircle,
   Cloud,
   Sun,
   CloudRain,
@@ -15,8 +14,8 @@ import {
   Droplets,
   Clock,
   Layers,
-  Activity,
   Star,
+  Building2,
 } from "lucide-react";
 import {
   getWeeklyForecast,
@@ -32,40 +31,57 @@ import {
   type HourlyForecast as HourlyForecastType,
   type TrendData,
 } from "../../services/forecast.service";
-import { API_CONFIG } from "../../services/api.config";
-import axios from "axios";
+import { getCanteens, type Canteen } from "../../services/canteen.service";
 import toast from "react-hot-toast";
 
-// Python ML API Types
-interface MLAnalyticsData {
-  total_records: number;
-  average_demand: number;
-  metrics: { mape: number; rmse: number; mae_test?: number; r2?: number };
-  top_drivers: Array<{ factor: string; importance: number }>;
-  chart_data: Array<{ day: string; actual: number; predicted: number }>;
-}
-
-const FORECAST_API_URL = API_CONFIG.FORECAST_API_URL;
-
-type TabKey = "overview" | "hourly" | "trends" | "ml";
+type TabKey = "overview" | "hourly" | "trends";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "overview", label: "Overview", icon: <BarChart2 size={16} /> },
   { key: "hourly", label: "Hourly", icon: <Clock size={16} /> },
-  { key: "trends", label: "Trends & Accuracy", icon: <TrendingUp size={16} /> },
-  { key: "ml", label: "ML Engine", icon: <Activity size={16} /> },
 ];
 
 const ManagerForecasts: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const initialTab = (searchParams.get("tab") as TabKey) || "overview";
+  const tabParam = searchParams.get("tab");
+  const initialTab: TabKey = tabParam === "hourly" ? "hourly" : "overview";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [mealFilter, setMealFilter] = useState("All");
   const [loading, setLoading] = useState(true);
 
-  // Get saved canteen selection from localStorage
-  const savedCanteenId =
-    localStorage.getItem("manager_selected_canteen") || undefined;
+  // Canteen selection state
+  const STORAGE_KEY = "manager_selected_canteen";
+  const [canteens, setCanteens] = useState<Canteen[]>([]);
+  const [selectedCanteenId, setSelectedCanteenId] = useState<string>(
+    localStorage.getItem(STORAGE_KEY) || "",
+  );
+  const [loadingCanteens, setLoadingCanteens] = useState(true);
+
+  // Load canteens on mount
+  useEffect(() => {
+    const loadCanteens = async () => {
+      try {
+        const data = await getCanteens({ isActive: true });
+        setCanteens(data);
+        if (!selectedCanteenId && data.length > 0) {
+          const firstId = data[0].id || data[0]._id || "";
+          setSelectedCanteenId(firstId);
+          localStorage.setItem(STORAGE_KEY, firstId);
+        }
+      } catch (err) {
+        console.error("Failed to load canteens:", err);
+      } finally {
+        setLoadingCanteens(false);
+      }
+    };
+    loadCanteens();
+  }, [selectedCanteenId]);
+
+  const handleCanteenChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newId = e.target.value;
+    setSelectedCanteenId(newId);
+    localStorage.setItem(STORAGE_KEY, newId);
+  };
 
   // Overview data
   const [chartData, setChartData] = useState<number[]>([]);
@@ -105,46 +121,11 @@ const ManagerForecasts: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [trendAnimKey, setTrendAnimKey] = useState(0);
 
-  // ML Engine State
-  const [mlData, setMlData] = useState<MLAnalyticsData | null>(null);
-  const [mlOnline, setMlOnline] = useState(false);
-  const [mlLoading, setMlLoading] = useState(true);
-  const mlRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [predictionInput, setPredictionInput] = useState({
-    Day_of_Week: "Monday",
-    Meal_Type: "Lunch",
-    Is_Veg: 1,
-    Event_Context: "Normal",
-    Weather: "Sunny",
-  });
-  const [predictionResult, setPredictionResult] = useState<number | null>(null);
-
   // Recording actual count
   const [recordingMeal, setRecordingMeal] = useState<string | null>(null);
   const [actualInput, setActualInput] = useState<number>(0);
 
   // ========== DATA LOADING ==========
-
-  const fetchML = useCallback(async (silent = false) => {
-    if (!silent) setMlLoading(true);
-    try {
-      const mlRes = await axios
-        .get(`${FORECAST_API_URL}/analytics`)
-        .catch(() => null);
-      if (mlRes?.data) {
-        setMlData(mlRes.data);
-        setMlOnline(true);
-      } else {
-        setMlOnline(false);
-        setMlData(null);
-      }
-    } catch {
-      setMlOnline(false);
-      setMlData(null);
-    } finally {
-      if (!silent) setMlLoading(false);
-    }
-  }, []);
 
   const loadOverview = async () => {
     setLoading(true);
@@ -155,8 +136,8 @@ const ManagerForecasts: React.FC = () => {
       const weekStartStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
 
       const [weekly, daily, acc] = await Promise.all([
-        getWeeklyForecast(weekStartStr, savedCanteenId).catch(() => []),
-        getDailyForecast(todayStr, savedCanteenId).catch(() => null),
+        getWeeklyForecast(weekStartStr, selectedCanteenId).catch(() => []),
+        getDailyForecast(todayStr, selectedCanteenId).catch(() => null),
         getAccuracyMetrics().catch(() => null),
       ]);
 
@@ -217,7 +198,7 @@ const ManagerForecasts: React.FC = () => {
   const loadHourly = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const data = await getHourlyForecast(today, savedCanteenId);
+      const data = await getHourlyForecast(today, selectedCanteenId);
       setHourlyData(data || []);
     } catch {
       setHourlyData([]);
@@ -243,32 +224,21 @@ const ManagerForecasts: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadOverview();
-  }, [mealFilter]);
+    if (!loadingCanteens) loadOverview();
+  }, [mealFilter, selectedCanteenId, loadingCanteens]);
   useEffect(() => {
-    fetchML();
-  }, [fetchML]);
-  useEffect(() => {
-    if (activeTab === "hourly") loadHourly();
+    if (activeTab === "hourly" && !loadingCanteens) loadHourly();
     if (activeTab === "trends") {
       loadTrends();
       trendRefreshRef.current = setInterval(() => loadTrends(true), 30000);
-    }
-    if (activeTab === "ml") {
-      // Auto-refresh ML tab every 30s
-      mlRefreshRef.current = setInterval(() => fetchML(true), 30000);
     }
     return () => {
       if (trendRefreshRef.current) {
         clearInterval(trendRefreshRef.current);
         trendRefreshRef.current = null;
       }
-      if (mlRefreshRef.current) {
-        clearInterval(mlRefreshRef.current);
-        mlRefreshRef.current = null;
-      }
     };
-  }, [activeTab, loadTrends, fetchML]);
+  }, [activeTab, loadTrends]);
 
   // ========== HANDLERS ==========
 
@@ -276,7 +246,12 @@ const ManagerForecasts: React.FC = () => {
     if (recordingMeal === forecast.mealType) {
       try {
         // Always record actual for today's date
-        await recordActual(todayStr, forecast.mealType, actualInput);
+        await recordActual(
+          todayStr,
+          forecast.mealType,
+          actualInput,
+          selectedCanteenId,
+        );
         toast.success(`Recorded ${actualInput} for ${forecast.mealType}`);
         setRecordingMeal(null);
         setActualInput(0);
@@ -287,24 +262,6 @@ const ManagerForecasts: React.FC = () => {
     } else {
       setRecordingMeal(forecast.mealType);
       setActualInput(forecast.predictedCount);
-    }
-  };
-
-  const handleSimulate = async () => {
-    try {
-      const pred = await axios.post(
-        `${FORECAST_API_URL}/predict`,
-        predictionInput,
-      );
-      setPredictionResult(pred.data.prediction);
-
-      const stats = await axios.post(`${FORECAST_API_URL}/scenario-stats`, {
-        Day_of_Week: predictionInput.Day_of_Week,
-        Meal_Type: predictionInput.Meal_Type,
-      });
-      toast.success("Prediction Updated!");
-    } catch {
-      toast.error("Prediction failed");
     }
   };
 
@@ -346,7 +303,33 @@ const ManagerForecasts: React.FC = () => {
             AI-driven demand prediction and planning.
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Canteen Selector */}
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm text-sm text-gray-700">
+            <Building2 size={16} className="text-orange-500" />
+            {loadingCanteens ? (
+              <span className="text-gray-400">Loading...</span>
+            ) : (
+              <select
+                value={selectedCanteenId}
+                onChange={handleCanteenChange}
+                className="bg-transparent border-none p-0 focus:ring-0 text-gray-800 font-medium cursor-pointer min-w-[120px]"
+              >
+                {canteens.map((canteen) => (
+                  <option
+                    key={canteen.id || canteen._id}
+                    value={canteen.id || canteen._id}
+                  >
+                    {canteen.name}
+                  </option>
+                ))}
+                {canteens.length === 0 && (
+                  <option value="">No canteens available</option>
+                )}
+              </select>
+            )}
+          </div>
+
           {/* Live Weather Badge */}
           {liveWeather && (
             <div
@@ -1462,228 +1445,6 @@ const ManagerForecasts: React.FC = () => {
                 })}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ========== TAB: ML ENGINE ========== */}
-      {activeTab === "ml" && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <TrendingUp size={22} className="text-indigo-600" />
-                AI Forecasting Engine
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Gradient Boosting ML model
-              </p>
-            </div>
-            <div className="flex gap-2 items-center">
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium border ${mlOnline ? "bg-green-100 text-green-700 border-green-200" : "bg-red-100 text-red-700 border-red-200"}`}
-              >
-                {mlOnline ? "Online" : "Offline"}
-              </span>
-              <button
-                onClick={fetchML}
-                className="p-2 text-gray-400 hover:text-gray-600"
-              >
-                <RefreshCw size={16} />
-              </button>
-            </div>
-          </div>
-
-          {mlLoading ? (
-            <div className="p-8 text-center text-gray-500">
-              <Loader2 className="animate-spin inline mr-2" size={20} />
-              Connecting...
-            </div>
-          ) : !mlOnline || !mlData ? (
-            <div className="p-8 flex flex-col items-center justify-center bg-white rounded-xl border shadow-sm">
-              <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700">
-                Engine Offline
-              </h3>
-              <p className="text-gray-500 mt-2 text-center max-w-md">
-                Start the Python service (port 5001).
-              </p>
-              <button
-                onClick={fetchML}
-                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-2"
-              >
-                <RefreshCw size={16} /> Retry
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Key Demand Drivers */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-base font-semibold text-gray-800 mb-4">
-                  Key Demand Drivers
-                </h3>
-                <div className="space-y-3">
-                  {mlData.top_drivers.map((d, i) => {
-                    const maxI = Math.max(
-                      ...mlData.top_drivers.map((x) => x.importance),
-                    );
-                    return (
-                      <div key={i}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-gray-600 truncate">
-                            {d.factor}
-                          </span>
-                          <span className="text-gray-900 font-medium">
-                            {(d.importance * 100).toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                          <div
-                            className="bg-indigo-400 h-full rounded-full"
-                            style={{
-                              width: `${(d.importance / maxI) * 100}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Scenario Simulator */}
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-base font-semibold text-gray-800 mb-6 border-b pb-2">
-                  Scenario Simulator
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  {[
-                    {
-                      label: "Day",
-                      key: "Day_of_Week",
-                      options: [
-                        "Monday",
-                        "Tuesday",
-                        "Wednesday",
-                        "Thursday",
-                        "Friday",
-                        "Saturday",
-                        "Sunday",
-                      ],
-                    },
-                    {
-                      label: "Meal",
-                      key: "Meal_Type",
-                      options: ["Breakfast", "Lunch", "Dinner"],
-                    },
-                  ].map((f) => (
-                    <div key={f.key}>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">
-                        {f.label}
-                      </label>
-                      <select
-                        className="w-full p-2 border rounded-lg text-sm"
-                        value={(predictionInput as any)[f.key]}
-                        onChange={(e) =>
-                          setPredictionInput({
-                            ...predictionInput,
-                            [f.key]: e.target.value,
-                          })
-                        }
-                      >
-                        {f.options.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Weather
-                    </label>
-                    <select
-                      className="w-full p-2 border rounded-lg text-sm"
-                      value={predictionInput.Weather}
-                      onChange={(e) =>
-                        setPredictionInput({
-                          ...predictionInput,
-                          Weather: e.target.value,
-                        })
-                      }
-                    >
-                      {["Sunny", "Cloudy", "Rainy", "Cold"].map((w) => (
-                        <option key={w} value={w}>
-                          {w}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Context
-                    </label>
-                    <select
-                      className="w-full p-2 border rounded-lg text-sm"
-                      value={predictionInput.Event_Context}
-                      onChange={(e) =>
-                        setPredictionInput({
-                          ...predictionInput,
-                          Event_Context: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="Normal">Normal Day</option>
-                      <option value="Exam_Week">Exam Week</option>
-                      <option value="Navratri_Festival">Festival</option>
-                      <option value="Holiday">Holiday</option>
-                      <option value="Diwali_Break">Vacation</option>
-                      <option value="Graduation">Graduation</option>
-                    </select>
-                  </div>
-                  <button
-                    onClick={handleSimulate}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg text-sm font-medium"
-                  >
-                    Simulate
-                  </button>
-                </div>
-                {predictionResult !== null && (
-                  <div className="mt-6 bg-indigo-50 border border-indigo-100 p-4 rounded-lg flex items-center justify-between">
-                    <div>
-                      <span className="text-indigo-600 font-medium text-xs uppercase tracking-wider">
-                        Predicted
-                      </span>
-                      <div className="text-2xl font-bold text-gray-900 mt-1">
-                        {predictionResult}{" "}
-                        <span className="text-sm font-normal text-gray-500">
-                          units
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-indigo-900 font-medium">
-                      {predictionInput.Day_of_Week}, {predictionInput.Meal_Type}
-                      , {predictionInput.Weather},{" "}
-                      {predictionInput.Event_Context === "Normal"
-                        ? "Normal Day"
-                        : predictionInput.Event_Context === "Exam_Week"
-                          ? "Exam Week"
-                          : predictionInput.Event_Context ===
-                              "Navratri_Festival"
-                            ? "Festival"
-                            : predictionInput.Event_Context === "Holiday"
-                              ? "Holiday"
-                              : predictionInput.Event_Context === "Diwali_Break"
-                                ? "Vacation"
-                                : predictionInput.Event_Context === "Graduation"
-                                  ? "Graduation"
-                                  : predictionInput.Event_Context}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
           )}
         </div>
       )}

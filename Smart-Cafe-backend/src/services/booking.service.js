@@ -239,6 +239,16 @@ const getMenuItemsByRequest = async (requestedItems) => {
 
 const reserveMenuStock = async (requestedItems, menuItemsById) => {
   const reserved = [];
+  const maxRetries = 3;
+  let lastError;
+
+  // Initialize missing availableQuantity in database for backward compatibility
+  // Mongoose schema defaults hide missing DB fields, so we fix them at DB level first.
+  const ids = requestedItems.map(item => item.menuItemId);
+  await MenuItem.updateMany(
+    { _id: { $in: ids }, availableQuantity: { $exists: false } },
+    { $set: { availableQuantity: 100 } }
+  );
 
   try {
     for (const { menuItemId, quantity } of requestedItems) {
@@ -248,26 +258,6 @@ const reserveMenuStock = async (requestedItems, menuItemsById) => {
         throw ApiError.badRequest(`${menuItem.itemName} is not available`);
       }
 
-      // Backward compatibility: older records may not have availableQuantity.
-      // Initialize them to default stock so ordering is not blocked.
-      if (
-        menuItem.availableQuantity === null ||
-        menuItem.availableQuantity === undefined
-      ) {
-        const initializedItem = await MenuItem.findByIdAndUpdate(
-          menuItemId,
-          { $set: { availableQuantity: 100 } },
-          { new: true },
-        );
-
-        if (!initializedItem) {
-          throw ApiError.badRequest(`Menu item not found: ${menuItemId}`);
-        }
-
-        menuItem = initializedItem;
-        menuItemsById.set(menuItemId, initializedItem);
-      }
-
       const availableQuantity = Number(menuItem.availableQuantity || 0);
       if (availableQuantity < quantity) {
         throw ApiError.badRequest(
@@ -275,22 +265,41 @@ const reserveMenuStock = async (requestedItems, menuItemsById) => {
         );
       }
 
-      const updated = await MenuItem.findOneAndUpdate(
-        {
-          _id: menuItemId,
-          isAvailable: true,
-          availableQuantity: { $gte: quantity },
-        },
-        {
-          $inc: { availableQuantity: -quantity },
-        },
-        { new: true },
-      );
+      // Retry logic for concurrent booking race conditions
+      let updated = null;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        updated = await MenuItem.findOneAndUpdate(
+          {
+            _id: menuItemId,
+            isAvailable: true,
+            availableQuantity: { $gte: quantity },
+          },
+          {
+            $inc: { availableQuantity: -quantity },
+          },
+          { new: true },
+        );
+
+        if (updated) {
+          break;
+        }
+
+        // Refresh item data and retry if stock was just bought by another user
+        if (attempt < maxRetries) {
+          const refreshedItem = await MenuItem.findById(menuItemId);
+          if (refreshedItem && refreshedItem.availableQuantity >= quantity) {
+            continue; // Retry
+          }
+          // If still not enough, fail with appropriate error
+          const currentQty = refreshedItem?.availableQuantity || 0;
+          throw ApiError.badRequest(
+            `${menuItem.itemName} has only ${currentQty} left (was just purchased)`,
+          );
+        }
+      }
 
       if (!updated) {
-        throw ApiError.conflict(
-          `${menuItem.itemName} stock changed. Please refresh and try again.`,
-        );
+        throw ApiError.badRequest(`${menuItem.itemName} is out of stock`);
       }
 
       if ((updated.availableQuantity || 0) <= 0 && updated.isAvailable) {

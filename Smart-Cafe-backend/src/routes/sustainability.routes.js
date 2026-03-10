@@ -18,6 +18,7 @@ router.get('/donations', sustainabilityController.getDonationHistory);
 router.post('/donations', isStaff, sustainabilityController.logDonation);
 
 // Management routes
+router.get('/reports', isManagement, sustainabilityController.getAllWasteReports);
 router.get('/stats', isManagement, sustainabilityController.getWasteStats);
 
 module.exports = router;

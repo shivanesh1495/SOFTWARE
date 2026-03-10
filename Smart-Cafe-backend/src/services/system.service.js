@@ -77,6 +77,13 @@ const getPublicSettings = async () => {
     return Boolean(value);
   };
 
+  const toNumber = (value, fallback) => {
+    if (value === null || value === undefined || value === "") return fallback;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+
+  // Booking service settings
   const onlineBookingEnabled = await SystemSetting.getValue(
     "ONLINE_BOOKING_ENABLED",
   );
@@ -95,7 +102,29 @@ const getPublicSettings = async () => {
     "SURPLUS_DONATION_ENABLED",
   );
 
+  // POLICY SETTINGS - Include these so students see the rules set by admin
+  const maxBookingsPerDay = await SystemSetting.getValue(
+    "MAX_BOOKINGS_PER_STUDENT_PER_DAY",
+  );
+  const peakBookingWindow = await SystemSetting.getValue(
+    "PEAK_BOOKING_WINDOW_MINS",
+  );
+  const noShowGrace = await SystemSetting.getValue("NO_SHOW_GRACE_PERIOD_MINS");
+  const noShowPenalty = await SystemSetting.getValue("NO_SHOW_PENALTY_DAYS");
+  const ricePortionLimit = await SystemSetting.getValue("RICE_PORTION_LIMIT_G");
+  const curryPortionLimit = await SystemSetting.getValue(
+    "CURRY_PORTION_LIMIT_ML",
+  );
+  const maxCapacityPerSlot = await SystemSetting.getValue(
+    "MAX_CAPACITY_PER_SLOT",
+  );
+  const facultyReserved = await SystemSetting.getValue(
+    "FACULTY_RESERVED_SLOTS",
+  );
+  const guestReserved = await SystemSetting.getValue("GUEST_RESERVED_SLOTS");
+
   return {
+    // Existing public settings
     onlineBookingEnabled: toBoolean(onlineBookingEnabled, true),
     walkinEnabled: toBoolean(walkinEnabled, true),
     slotDuration:
@@ -120,6 +149,20 @@ const getPublicSettings = async () => {
         : Number(tokenExpiryMins) || 60,
     portionSize: portionSize || "Standard",
     surplusDonationEnabled: toBoolean(surplusDonationEnabled, false),
+
+    // NEW: Policy settings that admin configures
+    policies: {
+      maxBookingsPerDay: toNumber(maxBookingsPerDay, 2),
+      peakBookingWindowMins: toNumber(peakBookingWindow, 30),
+      tokenExpiryMins: toNumber(tokenExpiryMins, 60),
+      noShowGraceMins: toNumber(noShowGrace, 15),
+      noShowPenaltyDays: toNumber(noShowPenalty, 7),
+      ricePortionLimitG: toNumber(ricePortionLimit, 250),
+      curryPortionLimitMl: toNumber(curryPortionLimit, 150),
+      maxCapacityPerSlot: toNumber(maxCapacityPerSlot, 200),
+      facultyReservedSlots: toNumber(facultyReserved, 50),
+      guestReservedSlots: toNumber(guestReserved, 20),
+    },
   };
 };
 

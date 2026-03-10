@@ -87,7 +87,13 @@ const activateForecastConfig = catchAsync(async (req, res) => {
   ApiResponse.ok(res, "Forecast config activated", result);
 });
 
+const updateDataset = catchAsync(async (req, res) => {
+  const result = await forecastService.exportWeekToMLDataset();
+  ApiResponse.ok(res, "ML Dataset updated successfully", result);
+});
+
 module.exports = {
+  updateDataset,
   getDailyForecast,
   getWeeklyForecast,
   getHourlyForecast,

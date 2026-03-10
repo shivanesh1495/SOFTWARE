@@ -22,6 +22,10 @@ interface Recommendation {
   reason: string;
 }
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
+import { getPublicSettings } from "../../services/system.service";
+import type { PublicSettings } from "../../services/system.service";
+import PoliciesDisplay from "../components/PoliciesDisplay";
+
 const getTimeString = () => {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -55,7 +59,13 @@ const StudentDashboard: React.FC = () => {
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
 
   // AI Queue Predictions
-  const [waitTimes, setWaitTimes] = useState<Record<string, number>>({});
+  const [waitTimes] = useState<Record<string, number>>({});
+
+  // Public settings (including policies)
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(
+    null,
+  );
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   useEffect(() => {
     loadCanteens();
@@ -63,6 +73,7 @@ const StudentDashboard: React.FC = () => {
     loadActiveBooking();
     loadTodaySlots();
     loadRecommendations();
+    loadPublicSettings();
 
     // Poll for notifications every 30 seconds
     const interval = setInterval(() => {
@@ -74,8 +85,14 @@ const StudentDashboard: React.FC = () => {
       loadTodaySlots();
     }, 30000);
 
+    // Reload policies every 30 seconds in case admin updates them
+    const settingsInterval = setInterval(() => {
+      loadPublicSettings();
+    }, 30000);
+
     const handleFocus = () => {
       loadTodaySlots();
+      loadPublicSettings();
     };
 
     window.addEventListener("focus", handleFocus);
@@ -83,6 +100,7 @@ const StudentDashboard: React.FC = () => {
     return () => {
       clearInterval(interval);
       clearInterval(slotsInterval);
+      clearInterval(settingsInterval);
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
@@ -92,9 +110,15 @@ const StudentDashboard: React.FC = () => {
     loadActiveBooking();
     loadTodaySlots();
     loadNotifications();
+    loadPublicSettings();
   }, []);
   useRealtimeRefresh(
-    ["booking:updated", "menu:updated", "notification:broadcast"],
+    [
+      "booking:updated",
+      "menu:updated",
+      "notification:broadcast",
+      "settings:updated",
+    ],
     handleRealtimeEvent,
   );
 
@@ -196,6 +220,18 @@ const StudentDashboard: React.FC = () => {
     }
   };
 
+  const loadPublicSettings = async () => {
+    try {
+      setSettingsLoading(true);
+      const settings = await getPublicSettings();
+      setPublicSettings(settings);
+    } catch (error) {
+      console.error("Failed to load public settings:", error);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
   // Get color styles based on canteen index or imageColor
   const getCanteenColors = (index: number) => {
     const colors = [
@@ -276,6 +312,11 @@ const StudentDashboard: React.FC = () => {
           </button>
         </div>
       </header>
+
+      {/* Policies Display */}
+      <section className="px-1">
+        <PoliciesDisplay settings={publicSettings} loading={settingsLoading} />
+      </section>
 
       {/* 1.5. AI Recommendations */}
       <section>

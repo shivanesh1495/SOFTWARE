@@ -39,4 +39,7 @@ router.post(
 // Record actuals (Management)
 router.post("/record-actual", isManagement, forecastController.recordActual);
 
+// Update ML Dataset (Admin)
+router.post("/update-dataset", isAdmin, forecastController.updateDataset);
+
 module.exports = router;
