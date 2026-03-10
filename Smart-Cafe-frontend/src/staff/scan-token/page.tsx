@@ -56,6 +56,7 @@ const StaffScanToken: React.FC = () => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loadingMenuItems, setLoadingMenuItems] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [cashCollected, setCashCollected] = useState<number | "">("");
 
   useEffect(() => {
     loadSettings();
@@ -191,7 +192,7 @@ const StaffScanToken: React.FC = () => {
     }
     try {
       setConfirming(true);
-      await bookingService.completeBooking(bookingId);
+      await bookingService.completeBooking(bookingId, cashCollected ? Number(cashCollected) : 0);
       toast.success(
         `Token ${booking?.tokenNumber || payload?.tokenNumber} entry confirmed!`,
       );
@@ -200,6 +201,7 @@ const StaffScanToken: React.FC = () => {
       setPayload(null);
       setVerificationWarnings([]);
       setTokenInput("");
+      setCashCollected("");
     } catch (error) {
       console.error("Failed to confirm entry:", error);
       toast.error("Failed to confirm entry");
@@ -578,8 +580,22 @@ const StaffScanToken: React.FC = () => {
                 </div>
               )}
 
+              <div className="bg-white rounded-lg p-4 border border-green-100">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Cash Collected (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={cashCollected}
+                  onChange={(e) => setCashCollected(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="0 (Optional)"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                />
+              </div>
+
               <Button
-                className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white border-transparent"
+                className="w-full bg-green-600 hover:bg-green-700 text-white border-transparent"
                 onClick={handleConfirmEntry}
                 isLoading={confirming}
               >

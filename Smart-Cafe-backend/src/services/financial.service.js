@@ -76,6 +76,22 @@ const recordBookingSale = async (booking) => {
 };
 
 /**
+ * Record cash sale for immediate walkins / scanned tokens
+ */
+const recordCashSale = async (amount, description, canteenId, staffId) => {
+  return await FinancialTransaction.create({
+    transactionType: "SALE",
+    amount: Math.abs(amount),
+    description: description,
+    category: "BOOKING",
+    paymentMethod: "CASH",
+    status: "COMPLETED",
+    canteenId: canteenId || "default",
+    performedBy: staffId,
+  });
+};
+
+/**
  * Record refund
  */
 const recordRefund = async (booking, reason, userId) => {
@@ -117,7 +133,7 @@ const getDailySummary = async (date, canteenId) => {
   // Build base match filter
   const baseMatch = { date: { $gte: start, $lte: end }, status: "COMPLETED" };
   if (canteenId) {
-    baseMatch.canteenId = new (require('mongoose').Types.ObjectId)(canteenId);
+    baseMatch.canteenId = canteenId;
   }
 
   const [summary, byCategory, byPaymentMethod] = await Promise.all([
@@ -290,6 +306,7 @@ module.exports = {
   getTransactionById,
   createTransaction,
   recordBookingSale,
+  recordCashSale,
   recordRefund,
   recordExpense,
   getDailySummary,

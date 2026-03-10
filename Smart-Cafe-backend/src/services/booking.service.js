@@ -6,6 +6,7 @@ const {
 } = require("../utils/helpers");
 const slotService = require("./slot.service");
 const notificationService = require("./notification.service");
+const financialService = require("./financial.service");
 const ApiError = require("../utils/ApiError");
 
 const POLICY_KEYS = {
@@ -737,8 +738,8 @@ const cancelBooking = async (id, userId, reason) => {
 /**
  * Complete booking (Staff)
  */
-const completeBooking = async (id) => {
-  const booking = await Booking.findById(id);
+const completeBooking = async (id, staffUserId, cashCollected = 0) => {
+  const booking = await Booking.findById(id).populate("slot");
 
   if (!booking) {
     throw ApiError.notFound("Booking not found");
@@ -769,6 +770,15 @@ const completeBooking = async (id) => {
   booking.status = "completed";
   booking.completedAt = new Date();
   await booking.save();
+
+  if (cashCollected > 0) {
+    await financialService.recordCashSale(
+      cashCollected,
+      `Cash collected for token ${booking.tokenNumber}`,
+      booking.slot ? booking.slot.canteenId : null,
+      staffUserId
+    );
+  }
 
   // Send completion notification
   await notificationService.createNotification({
@@ -812,9 +822,7 @@ const getBookingStats = async (date, canteenId) => {
       { $unwind: "$slotData" },
       {
         $match: {
-          "slotData.canteenId": new (require("mongoose").Types.ObjectId)(
-            canteenId,
-          ),
+          "slotData.canteenId": canteenId,
         },
       },
     );
@@ -859,7 +867,7 @@ const getBookingStats = async (date, canteenId) => {
 /**
  * Create walk-in booking (Staff only - no user required)
  */
-const createWalkinBooking = async (data) => {
+const createWalkinBooking = async (data, staffUserId) => {
   // Check slot availability
   const slot = await Slot.findById(data.slotId);
 
@@ -878,6 +886,15 @@ const createWalkinBooking = async (data) => {
   await ensureServiceOpen("walkin");
 
   ensureSameDayBooking(slot.date);
+
+  if (staffUserId) {
+    const staffUser = await User.findById(staffUserId);
+    if (staffUser && !['admin', 'manager'].includes(staffUser.role)) {
+      if (slot.canteenId && slot.canteenId.toString() !== staffUser.canteenId?.toString()) {
+        throw ApiError.forbidden("Not authorized: Cannot create walk-in for a different canteen.");
+      }
+    }
+  }
 
   const slotDateTime = parseSlotDateTime(slot);
   if (slotDateTime && new Date() >= slotDateTime) {
@@ -941,6 +958,15 @@ const createWalkinBooking = async (data) => {
     // Increment slot booking count
     await slotService.incrementBooking(data.slotId);
     slotIncremented = true;
+
+    if (data.cashCollected > 0) {
+      await financialService.recordCashSale(
+        data.cashCollected,
+        `Cash collected for walk-in token ${booking.tokenNumber}`,
+        slot.canteenId,
+        staffUserId
+      );
+    }
 
     // Populate and return
     await booking.populate([{ path: "slot" }, { path: "items.menuItem" }]);
@@ -1466,7 +1492,7 @@ const generateBookingQRToken = async (bookingId, userId) => {
 /**
  * Verify and decode QR token
  */
-const verifyBookingQRToken = async (qrToken) => {
+const verifyBookingQRToken = async (qrToken, staffUserId) => {
   const qrTokenUtil = require("../utils/qrToken");
 
   // Verify JWT signature
@@ -1494,6 +1520,14 @@ const verifyBookingQRToken = async (qrToken) => {
 
   // If booking exists, check current status
   if (currentBooking) {
+    if (staffUserId) {
+      const staffUser = await User.findById(staffUserId);
+      if (staffUser && !['admin', 'manager'].includes(staffUser.role)) {
+        if (currentBooking.slot && currentBooking.slot.canteenId && currentBooking.slot.canteenId.toString() !== staffUser.canteenId?.toString()) {
+          throw ApiError.forbidden("Not authorized: Booking belongs to a different canteen.");
+        }
+      }
+    }
     // Update validation based on current booking status
     if (currentBooking.status === "completed") {
       validation.errors.push("This booking has already been completed");

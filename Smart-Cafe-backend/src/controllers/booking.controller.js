@@ -86,7 +86,7 @@ const cancelBooking = catchAsync(async (req, res) => {
  * POST /api/bookings/:id/complete
  */
 const completeBooking = catchAsync(async (req, res) => {
-  const booking = await bookingService.completeBooking(req.params.id);
+  const booking = await bookingService.completeBooking(req.params.id, req.userId, req.body.cashCollected);
 
   emitToAll("booking:updated", { action: "completed", booking });
   ApiResponse.ok(res, "Booking completed", booking);
@@ -110,7 +110,7 @@ const getBookingStats = catchAsync(async (req, res) => {
  * POST /api/bookings/walkin
  */
 const createWalkinBooking = catchAsync(async (req, res) => {
-  const booking = await bookingService.createWalkinBooking(req.body);
+  const booking = await bookingService.createWalkinBooking(req.body, req.userId);
 
   emitToAll("booking:updated", { action: "walkin", booking });
   emitToAll("menu:updated", {
@@ -212,7 +212,7 @@ const generateQRToken = catchAsync(async (req, res) => {
  * POST /api/bookings/verify-qr
  */
 const verifyQRToken = catchAsync(async (req, res) => {
-  const result = await bookingService.verifyBookingQRToken(req.body.qrToken);
+  const result = await bookingService.verifyBookingQRToken(req.body.qrToken, req.userId);
   ApiResponse.ok(res, "QR token verified", result);
 });
 

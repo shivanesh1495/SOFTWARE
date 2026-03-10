@@ -329,8 +329,8 @@ export const cancelBooking = async (
 /**
  * Complete a booking (Staff only)
  */
-export const completeBooking = async (bookingId: string): Promise<Booking> => {
-  const response = await api.post(`/bookings/${bookingId}/complete`);
+export const completeBooking = async (bookingId: string, cashCollected?: number): Promise<Booking> => {
+  const response = await api.post(`/bookings/${bookingId}/complete`, { cashCollected });
   return normalizeBooking(response.data.data);
 };
 
@@ -351,6 +351,7 @@ export const createWalkinBooking = async (data: {
   slotId: string;
   guestName: string;
   items: { menuItem: string; quantity: number }[];
+  cashCollected?: number;
 }): Promise<Booking> => {
   const response = await api.post("/bookings/walkin", data);
   return normalizeBooking(response.data.data);
