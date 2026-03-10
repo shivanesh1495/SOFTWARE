@@ -21,6 +21,7 @@ import {
   type MealForecast,
 } from "../../services/forecast.service";
 import { getCanteens, type Canteen } from "../../services/canteen.service";
+import { getDailySummary } from "../../services/financial.service";
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 interface Stats {
   totalUsers: number;
@@ -36,6 +37,12 @@ interface SystemAlert {
   type: "order" | "announcement" | "alert" | "system";
   isUrgent: boolean;
   createdAt: string;
+}
+
+interface CanteenNetRevenue {
+  id: string;
+  name: string;
+  netIncome: number;
 }
 
 const AdminDashboard: React.FC = () => {
@@ -54,11 +61,17 @@ const AdminDashboard: React.FC = () => {
   const [forecastCanteens, setForecastCanteens] = useState<Canteen[]>([]);
   const [selectedForecastCanteenId, setSelectedForecastCanteenId] =
     useState("all");
+  const [canteenNetRevenue, setCanteenNetRevenue] = useState<
+    CanteenNetRevenue[]
+  >([]);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [totalNetRevenue, setTotalNetRevenue] = useState(0);
 
   useEffect(() => {
     loadStats();
     loadAlerts();
     loadForecastCanteens();
+    loadRevenue();
   }, []);
 
   useEffect(() => {
@@ -236,11 +249,52 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const loadRevenue = async () => {
+    try {
+      setRevenueLoading(true);
+      const canteens = await getCanteens();
+
+      const revenueRows = await Promise.all(
+        canteens.map(async (canteen) => {
+          const id = canteen.id || canteen._id;
+          if (!id) return null;
+
+          const summary = await getDailySummary({ canteenId: id }).catch(
+            () => null,
+          );
+
+          return {
+            id,
+            name: canteen.name,
+            netIncome: Number(summary?.netIncome || 0),
+          } as CanteenNetRevenue;
+        }),
+      );
+
+      const validRows = revenueRows.filter(
+        (row): row is CanteenNetRevenue => !!row,
+      );
+
+      validRows.sort((a, b) => b.netIncome - a.netIncome);
+      const totalNet = validRows.reduce((sum, row) => sum + row.netIncome, 0);
+
+      setCanteenNetRevenue(validRows);
+      setTotalNetRevenue(totalNet);
+    } catch (error) {
+      console.error("Failed to load canteen net revenue:", error);
+      setCanteenNetRevenue([]);
+      setTotalNetRevenue(0);
+    } finally {
+      setRevenueLoading(false);
+    }
+  };
+
   // Real-time refresh: instantly reload when any data changes in the system
   const handleRealtimeEvent = useCallback(() => {
     loadStats();
     loadAlerts();
     loadForecast();
+    loadRevenue();
   }, [selectedForecastCanteenId]);
   useRealtimeRefresh(
     [
@@ -523,6 +577,57 @@ const AdminDashboard: React.FC = () => {
           </section>
         )
       )}
+
+      {/* Net Revenue By Canteen */}
+      <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Building2 size={20} className="text-emerald-600" />
+          <h2 className="text-lg font-bold text-gray-900">
+            Today's Net Revenue By Canteen
+          </h2>
+        </div>
+
+        {revenueLoading ? (
+          <div className="flex items-center justify-center py-8 text-gray-400">
+            <div className="animate-pulse">Loading revenue...</div>
+          </div>
+        ) : canteenNetRevenue.length === 0 ? (
+          <div className="flex items-center justify-center py-8 text-gray-400 text-sm">
+            No canteen revenue data available
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {canteenNetRevenue.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100"
+                >
+                  <span className="text-sm font-medium text-gray-700">
+                    {row.name}
+                  </span>
+                  <span
+                    className={`text-sm font-semibold ${row.netIncome >= 0 ? "text-emerald-600" : "text-red-600"}`}
+                  >
+                    ₹ {row.netIncome.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-800">
+                Total Of All Canteens
+              </span>
+              <span
+                className={`text-base font-bold ${totalNetRevenue >= 0 ? "text-emerald-700" : "text-red-700"}`}
+              >
+                ₹ {totalNetRevenue.toLocaleString("en-IN")}
+              </span>
+            </div>
+          </>
+        )}
+      </section>
 
       {/* Quick Access Grid */}
       <section>
