@@ -38,6 +38,29 @@ const isSameDay = (a, b) =>
   a.getDate() === b.getDate();
 
 /**
+ * Parse time string to minutes for sorting
+ * Converts "07:00 AM - 08:00 AM" or "12:30 PM - 01:00 PM" to minutes since midnight
+ */
+const parseTimeToMinutes = (timeString) => {
+  if (!timeString) return 0;
+
+  // Extract start time from "HH:MM AM/PM - HH:MM AM/PM" format
+  const startTime = timeString.split("-")[0].trim();
+  const match = startTime.match(/^(\d{1,2}):(\d{2})(\s*[AP]M)?$/i);
+
+  if (!match) return 0;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3]?.trim().toUpperCase();
+
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+};
+
+/**
  * Get all slots with filters
  */
 const getSlots = async (query) => {
@@ -62,10 +85,20 @@ const getSlots = async (query) => {
     filter.canteenId = query.canteenId;
   }
 
+  // Fetch slots without time sorting first
   const [slots, total] = await Promise.all([
-    Slot.find(filter).sort({ date: 1, time: 1 }).skip(skip).limit(limit),
+    Slot.find(filter).sort({ date: 1 }).skip(skip).limit(limit),
     Slot.countDocuments(filter),
   ]);
+
+  // Sort slots by time (morning to evening) after fetching
+  slots.sort((a, b) => {
+    const dateCompare = new Date(a.date) - new Date(b.date);
+    if (dateCompare !== 0) return dateCompare;
+
+    // If same date, sort by time in minutes
+    return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+  });
 
   return paginateResponse(slots, total, page, limit);
 };
@@ -229,11 +262,64 @@ const cancelSlot = async (id) => {
  * Delete slot
  */
 const deleteSlot = async (id) => {
-  const slot = await Slot.findByIdAndDelete(id);
+  const slot = await Slot.findById(id);
 
   if (!slot) {
     throw ApiError.notFound("Slot not found");
   }
+
+  // Prevent deletion of system slots
+  if (slot.isSystemSlot) {
+    throw ApiError.forbidden(
+      "System slots cannot be deleted. You can cancel them instead.",
+    );
+  }
+
+  await Slot.findByIdAndDelete(id);
+
+  return slot;
+};
+
+/**
+ * Disable a system slot (prevents bookings but keeps slot visible)
+ */
+const disableSlot = async (id) => {
+  const slot = await Slot.findById(id);
+
+  if (!slot) {
+    throw ApiError.notFound("Slot not found");
+  }
+
+  if (!slot.isSystemSlot) {
+    throw ApiError.badRequest(
+      "Only system slots can be disabled. Use cancel or delete for custom slots.",
+    );
+  }
+
+  slot.isDisabled = true;
+  await slot.save();
+
+  return slot;
+};
+
+/**
+ * Enable a system slot (allows bookings again)
+ */
+const enableSlot = async (id) => {
+  const slot = await Slot.findById(id);
+
+  if (!slot) {
+    throw ApiError.notFound("Slot not found");
+  }
+
+  if (!slot.isSystemSlot) {
+    throw ApiError.badRequest(
+      "Only system slots can be enabled. Use reopen for custom slots.",
+    );
+  }
+
+  slot.isDisabled = false;
+  await slot.save();
 
   return slot;
 };
@@ -311,13 +397,19 @@ const getTodaySlots = async (canteenId) => {
   const filter = {
     date: { $gte: start, $lte: end },
     status: { $ne: "Cancelled" },
+    isDisabled: { $ne: true },
   };
 
   if (canteenId) {
     filter.canteenId = canteenId;
   }
 
-  const slots = await Slot.find(filter).sort({ time: 1 });
+  const slots = await Slot.find(filter);
+
+  // Sort slots by time (morning to evening) using parseTimeToMinutes
+  slots.sort((a, b) => {
+    return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+  });
 
   return slots;
 };
@@ -330,6 +422,8 @@ module.exports = {
   updateCapacity,
   cancelSlot,
   deleteSlot,
+  disableSlot,
+  enableSlot,
   incrementBooking,
   decrementBooking,
   decrementBookingBy,

@@ -335,13 +335,17 @@ const createBooking = async (userId, data) => {
     throw ApiError.badRequest("This slot has been cancelled");
   }
 
+  if (slot.isDisabled) {
+    throw ApiError.badRequest("This slot is currently disabled");
+  }
+
   if (slot.booked >= slot.capacity) {
     throw ApiError.badRequest("This slot is fully booked");
   }
 
   // Priority Segment Check
   const user = await User.findById(userId);
-  if (user && user.segment === 'student') {
+  if (user && user.segment === "student") {
     // Fetch reserved counts
     const facultyReserved = await getPolicyNumber("FACULTY_RESERVED_SLOTS", 0);
     const guestReserved = await getPolicyNumber("GUEST_RESERVED_SLOTS", 0);
@@ -351,7 +355,9 @@ const createBooking = async (userId, data) => {
     const studentCapacity = Math.max(0, slot.capacity - totalReserved);
 
     if (slot.booked >= studentCapacity) {
-      throw ApiError.badRequest("Slot is full (Reserved slots are for Faculty/Guests only)");
+      throw ApiError.badRequest(
+        "Slot is full (Reserved slots are for Faculty/Guests only)",
+      );
     }
   }
 
@@ -582,34 +588,36 @@ const getBookingStats = async (date, canteenId) => {
 
   // Build match stage - lookup slot if canteenId filter is provided
   const pipeline = [];
-  
+
   // Match by date
   pipeline.push({
     $match: {
       createdAt: { $gte: start, $lte: end },
     },
   });
-  
+
   // If canteenId is provided, lookup slot and filter by canteenId
   if (canteenId) {
     pipeline.push(
       {
         $lookup: {
-          from: 'slots',
-          localField: 'slot',
-          foreignField: '_id',
-          as: 'slotData',
+          from: "slots",
+          localField: "slot",
+          foreignField: "_id",
+          as: "slotData",
         },
       },
-      { $unwind: '$slotData' },
+      { $unwind: "$slotData" },
       {
         $match: {
-          'slotData.canteenId': new (require('mongoose').Types.ObjectId)(canteenId),
+          "slotData.canteenId": new (require("mongoose").Types.ObjectId)(
+            canteenId,
+          ),
         },
-      }
+      },
     );
   }
-  
+
   // Group by status
   pipeline.push({
     $group: {
@@ -625,12 +633,13 @@ const getBookingStats = async (date, canteenId) => {
   const totalRevenue = stats
     .filter((s) => s._id === "completed")
     .reduce((acc, s) => acc + s.totalAmount, 0);
-  
+
   // Extract individual status counts for frontend compatibility
-  const confirmed = stats.find(s => s._id === 'confirmed')?.count || 0;
-  const completed = stats.find(s => s._id === 'completed')?.count || 0;
-  const cancelled = stats.find(s => s._id === 'cancelled')?.count || 0;
-  const expired = stats.find(s => s._id === 'expired' || s._id === 'no_show')?.count || 0;
+  const confirmed = stats.find((s) => s._id === "confirmed")?.count || 0;
+  const completed = stats.find((s) => s._id === "completed")?.count || 0;
+  const cancelled = stats.find((s) => s._id === "cancelled")?.count || 0;
+  const expired =
+    stats.find((s) => s._id === "expired" || s._id === "no_show")?.count || 0;
 
   return {
     date: start.toISOString().split("T")[0],
@@ -891,8 +900,7 @@ const getQueueInfo = async (slotId, userId) => {
   if (completedBookings.length > 0) {
     const totalMins = completedBookings.reduce((sum, b) => {
       const diff =
-        (new Date(b.completedAt).getTime() -
-          new Date(b.createdAt).getTime()) /
+        (new Date(b.completedAt).getTime() - new Date(b.createdAt).getTime()) /
         60000;
       return sum + Math.max(0, diff);
     }, 0);
@@ -938,7 +946,7 @@ const rescheduleBooking = async (bookingId, newSlotId, userId) => {
     const cutoffTime = new Date(slotDateTime.getTime() - 30 * 60000);
     if (new Date() > cutoffTime) {
       throw ApiError.badRequest(
-        "Cannot reschedule within 30 minutes of slot start time"
+        "Cannot reschedule within 30 minutes of slot start time",
       );
     }
   }
@@ -992,10 +1000,27 @@ const getTokenStatus = async (tokenNumber) => {
   }
 
   const REASON_LABELS = {
-    confirmed: { status: "Active", message: "Your token is active and valid.", icon: "✅" },
-    completed: { status: "Completed", message: "Your meal has been served.", icon: "🍽️" },
-    cancelled: { status: "Cancelled", message: booking.cancellationReason || "This booking was cancelled.", icon: "❌" },
-    no_show: { status: "Missed", message: "You did not arrive within the grace period. The slot was released for others.", icon: "⏰" },
+    confirmed: {
+      status: "Active",
+      message: "Your token is active and valid.",
+      icon: "✅",
+    },
+    completed: {
+      status: "Completed",
+      message: "Your meal has been served.",
+      icon: "🍽️",
+    },
+    cancelled: {
+      status: "Cancelled",
+      message: booking.cancellationReason || "This booking was cancelled.",
+      icon: "❌",
+    },
+    no_show: {
+      status: "Missed",
+      message:
+        "You did not arrive within the grace period. The slot was released for others.",
+      icon: "⏰",
+    },
   };
 
   const statusInfo = REASON_LABELS[booking.status] || {
@@ -1007,15 +1032,21 @@ const getTokenStatus = async (tokenNumber) => {
   // Check token expiry
   let isExpired = false;
   if (booking.status === "confirmed" && booking.slot) {
-    const tokenExpiryMins = await getPolicyNumber(POLICY_KEYS.tokenExpiry, null);
+    const tokenExpiryMins = await getPolicyNumber(
+      POLICY_KEYS.tokenExpiry,
+      null,
+    );
     if (tokenExpiryMins) {
       const slotEndTime = await getSlotEndTime(booking.slot);
       if (slotEndTime) {
-        const expiryTime = new Date(slotEndTime.getTime() + tokenExpiryMins * 60000);
+        const expiryTime = new Date(
+          slotEndTime.getTime() + tokenExpiryMins * 60000,
+        );
         if (new Date() > expiryTime) {
           isExpired = true;
           statusInfo.status = "Expired";
-          statusInfo.message = "Your token has expired because the slot time has passed.";
+          statusInfo.message =
+            "Your token has expired because the slot time has passed.";
           statusInfo.icon = "⌛";
         }
       }
@@ -1048,4 +1079,3 @@ module.exports = {
   rescheduleBooking,
   getTokenStatus,
 };
-

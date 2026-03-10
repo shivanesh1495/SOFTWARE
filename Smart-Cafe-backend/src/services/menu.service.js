@@ -145,7 +145,9 @@ const getAllMenuItems = async (query = {}) => {
 
   // Allergen exclusion filter: ?excludeAllergens=peanuts,dairy
   if (query.excludeAllergens) {
-    const allergensToExclude = query.excludeAllergens.split(',').map(a => a.trim().toLowerCase());
+    const allergensToExclude = query.excludeAllergens
+      .split(",")
+      .map((a) => a.trim().toLowerCase());
     filter.allergens = { $nin: allergensToExclude };
   }
 

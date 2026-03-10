@@ -213,16 +213,20 @@ const buildFallbackNutrition = (itemNames, reason) => {
 
 const buildGeminiError = (error) => {
   const message = error?.message || "Gemini request failed";
-  
+
   if (message.includes("API key not valid")) {
     return ApiError.unauthorized("Gemini API Key is invalid.");
   }
-  
+
   if (message.includes("quota") || error?.status === 429) {
-    return ApiError.tooManyRequests("Gemini quota exceeded. Please try again later.");
+    return ApiError.tooManyRequests(
+      "Gemini quota exceeded. Please try again later.",
+    );
   }
 
-  return ApiError.internal(`Gemini service is currently unavailable: ${message}`);
+  return ApiError.internal(
+    `Gemini service is currently unavailable: ${message}`,
+  );
 };
 
 const getNutritionForItems = async (itemNames = []) => {
@@ -233,12 +237,16 @@ const getNutritionForItems = async (itemNames = []) => {
   }
 
   if (!config.gemini.apiKey) {
-    throw ApiError.badRequest(
-      "Gemini API key is not configured on the server. Please add GEMINI_API_KEY.",
+    console.log(
+      "Gemini API key not configured, using local nutrition estimates",
+    );
+    return buildFallbackNutrition(
+      cleanedNames,
+      "AI service unavailable. Showing approximate local nutrient estimates.",
     );
   }
 
-  const systemInstruction = 
+  const systemInstruction =
     'You are a nutrition assistant. Return only valid JSON with this exact shape: {"items":[{"itemName":string,"calories":number,"proteinGrams":number,"carbsGrams":number,"fatGrams":number,"fiberGrams":number,"sugarGrams":number}]}. Provide practical per-serving estimates.';
 
   const prompt = `Provide nutrient estimates for these foods: ${cleanedNames.join(", ")}. Use one object per food item and keep numbers realistic for one serving.`;
@@ -251,7 +259,7 @@ const getNutritionForItems = async (itemNames = []) => {
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.2,
-      }
+      },
     });
 
     const result = await model.generateContent(prompt);
@@ -273,10 +281,13 @@ const getNutritionForItems = async (itemNames = []) => {
     };
   } catch (error) {
     console.error("Gemini API Error:", error);
-    
+
     // Fallback if quota exhausted or rate limit
-    if (error?.message?.toLowerCase().includes("quota") || error?.status === 429) {
-       return buildFallbackNutrition(
+    if (
+      error?.message?.toLowerCase().includes("quota") ||
+      error?.status === 429
+    ) {
+      return buildFallbackNutrition(
         cleanedNames,
         "Gemini API quota exhausted. Showing approximate local nutrient estimates.",
       );

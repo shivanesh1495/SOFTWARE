@@ -1,6 +1,6 @@
-const { slotService } = require('../services');
-const catchAsync = require('../utils/catchAsync');
-const ApiResponse = require('../utils/ApiResponse');
+const { slotService } = require("../services");
+const catchAsync = require("../utils/catchAsync");
+const ApiResponse = require("../utils/ApiResponse");
 
 /**
  * Get all slots
@@ -8,8 +8,8 @@ const ApiResponse = require('../utils/ApiResponse');
  */
 const getSlots = catchAsync(async (req, res) => {
   const result = await slotService.getSlots(req.query);
-  
-  ApiResponse.ok(res, 'Slots retrieved', result);
+
+  ApiResponse.ok(res, "Slots retrieved", result);
 });
 
 /**
@@ -18,8 +18,8 @@ const getSlots = catchAsync(async (req, res) => {
  */
 const getSlotById = catchAsync(async (req, res) => {
   const slot = await slotService.getSlotById(req.params.id);
-  
-  ApiResponse.ok(res, 'Slot retrieved', slot);
+
+  ApiResponse.ok(res, "Slot retrieved", slot);
 });
 
 /**
@@ -28,8 +28,8 @@ const getSlotById = catchAsync(async (req, res) => {
  */
 const createSlot = catchAsync(async (req, res) => {
   const slot = await slotService.createSlot(req.body);
-  
-  ApiResponse.created(res, 'Slot created', slot);
+
+  ApiResponse.created(res, "Slot created", slot);
 });
 
 /**
@@ -38,8 +38,8 @@ const createSlot = catchAsync(async (req, res) => {
  */
 const updateSlot = catchAsync(async (req, res) => {
   const slot = await slotService.updateSlot(req.params.id, req.body);
-  
-  ApiResponse.ok(res, 'Slot updated', slot);
+
+  ApiResponse.ok(res, "Slot updated", slot);
 });
 
 /**
@@ -47,9 +47,12 @@ const updateSlot = catchAsync(async (req, res) => {
  * PATCH /api/slots/:id/capacity
  */
 const updateCapacity = catchAsync(async (req, res) => {
-  const slot = await slotService.updateCapacity(req.params.id, req.body.capacity);
-  
-  ApiResponse.ok(res, 'Capacity updated', slot);
+  const slot = await slotService.updateCapacity(
+    req.params.id,
+    req.body.capacity,
+  );
+
+  ApiResponse.ok(res, "Capacity updated", slot);
 });
 
 /**
@@ -58,8 +61,8 @@ const updateCapacity = catchAsync(async (req, res) => {
  */
 const cancelSlot = catchAsync(async (req, res) => {
   const slot = await slotService.cancelSlot(req.params.id);
-  
-  ApiResponse.ok(res, 'Slot cancelled', slot);
+
+  ApiResponse.ok(res, "Slot cancelled", slot);
 });
 
 /**
@@ -68,8 +71,28 @@ const cancelSlot = catchAsync(async (req, res) => {
  */
 const deleteSlot = catchAsync(async (req, res) => {
   await slotService.deleteSlot(req.params.id);
-  
-  ApiResponse.ok(res, 'Slot deleted');
+
+  ApiResponse.ok(res, "Slot deleted");
+});
+
+/**
+ * Disable system slot
+ * POST /api/slots/:id/disable
+ */
+const disableSlot = catchAsync(async (req, res) => {
+  const slot = await slotService.disableSlot(req.params.id);
+
+  ApiResponse.ok(res, "System slot disabled", slot);
+});
+
+/**
+ * Enable system slot
+ * POST /api/slots/:id/enable
+ */
+const enableSlot = catchAsync(async (req, res) => {
+  const slot = await slotService.enableSlot(req.params.id);
+
+  ApiResponse.ok(res, "System slot enabled", slot);
 });
 
 /**
@@ -78,8 +101,8 @@ const deleteSlot = catchAsync(async (req, res) => {
  */
 const getTodaySlots = catchAsync(async (req, res) => {
   const slots = await slotService.getTodaySlots(req.query.canteenId);
-  
-  ApiResponse.ok(res, 'Today\'s slots retrieved', slots);
+
+  ApiResponse.ok(res, "Today's slots retrieved", slots);
 });
 
 module.exports = {
@@ -90,5 +113,7 @@ module.exports = {
   updateCapacity,
   cancelSlot,
   deleteSlot,
+  disableSlot,
+  enableSlot,
   getTodaySlots,
 };

@@ -14,8 +14,13 @@ import * as notificationService from "../../services/notification.service";
 import type { Notification } from "../../services/notification.service";
 import * as bookingService from "../../services/booking.service";
 import type { Booking, Slot } from "../../services/booking.service";
-import { getAIRecommendations } from "../../services/ai.service";
-import type { AIRecommendation } from "../../services/ai.service";
+import { getMenuItems } from "../../services/menu.service";
+import type { MenuItem } from "../../services/menu.service";
+
+interface Recommendation {
+  item: MenuItem;
+  reason: string;
+}
 import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 const getTimeString = () => {
   return new Date().toLocaleTimeString([], {
@@ -45,10 +50,8 @@ const StudentDashboard: React.FC = () => {
   const [canteens, setCanteens] = useState<Canteen[]>([]);
   const [canteensLoading, setCanteensLoading] = useState(true);
 
-  // AI Recommendations
-  const [recommendations, setRecommendations] = useState<AIRecommendation[]>(
-    [],
-  );
+  // Menu Recommendations
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
 
   // AI Queue Predictions
@@ -158,8 +161,34 @@ const StudentDashboard: React.FC = () => {
   const loadRecommendations = async () => {
     try {
       setRecommendationsLoading(true);
-      const data = await getAIRecommendations();
-      setRecommendations(data);
+      // Fetch available menu items
+      const menuItems = await getMenuItems({ isAvailable: true });
+
+      // Randomly select 3-5 items
+      const shuffled = [...menuItems].sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, Math.min(5, menuItems.length));
+
+      // Generic recommendation reasons
+      const reasons = [
+        "Popular choice among students",
+        "Highly rated by our community",
+        "Fresh and delicious today",
+        "Chef's special recommendation",
+        "Try something new!",
+        "Best seller this week",
+        "Perfect for your meal time",
+        "Nutritious and tasty",
+        "Customer favorite",
+        "Great value for money",
+      ];
+
+      // Map to recommendations with random reasons
+      const recommendations: Recommendation[] = selected.map((item, index) => ({
+        item,
+        reason: reasons[index % reasons.length],
+      }));
+
+      setRecommendations(recommendations);
     } catch (error) {
       console.error("Failed to load recommendations:", error);
     } finally {
@@ -260,7 +289,7 @@ const StudentDashboard: React.FC = () => {
         {recommendationsLoading ? (
           <div className="bg-white/60 backdrop-blur-md p-6 rounded-[24px] border border-white/50 shadow-sm flex items-center justify-center py-10 text-brand font-medium">
             <Loader2 className="animate-spin mr-3" size={24} />
-            <span>AI generating personalized picks...</span>
+            <span>Loading top picks...</span>
           </div>
         ) : recommendations.length === 0 ? (
           <div className="bg-white/60 backdrop-blur-md p-6 rounded-[24px] border border-white/50 shadow-sm text-center text-gray-500 font-medium">

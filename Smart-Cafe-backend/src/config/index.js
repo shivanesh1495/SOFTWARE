@@ -5,7 +5,9 @@ module.exports = {
   port: parseInt(process.env.PORT, 10) || 3000,
 
   mongodb: {
-    uri: process.env.MONGODB_URI || "mongodb://localhost:27017/smart-cafe",
+    uri:
+      process.env.MONGODB_URI ||
+      "mongodb+srv://mcshivanesh777:Shivanesh%401495@shiva1.osdbukz.mongodb.net/smart-cafe?retryWrites=true&w=majority",
     retryCount: Number.isNaN(parseInt(process.env.MONGODB_RETRY_COUNT, 10))
       ? 0
       : parseInt(process.env.MONGODB_RETRY_COUNT, 10),

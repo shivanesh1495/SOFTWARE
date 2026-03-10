@@ -17,7 +17,10 @@ import {
   createSlot as apiCreateSlot,
   updateSlotCapacity,
   getAllBookings,
+  cancelSlotById,
   deleteSlot,
+  disableSlot,
+  enableSlot,
 } from "../../services/booking.service";
 import type { Slot, Booking } from "../../services/booking.service";
 import * as canteenService from "../../services/canteen.service";
@@ -116,7 +119,7 @@ const AdminBookings: React.FC = () => {
     };
   }, [fetchSlotsSilent]);
 
-  const handleCancelSlot = async (id: string) => {
+  const handleDeleteSlot = async (id: string) => {
     if (
       !window.confirm(
         "Emergency Delete: Are you sure you want to delete this slot? All existing bookings will be affected.",
@@ -130,6 +133,54 @@ const AdminBookings: React.FC = () => {
       fetchSlots();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to delete slot");
+    }
+  };
+
+  const handleCancelSlot = async (id: string) => {
+    if (
+      !window.confirm(
+        "Cancel this slot? This will stop bookings for this slot.",
+      )
+    )
+      return;
+    try {
+      await cancelSlotById(id);
+      toast.success("Slot cancelled successfully");
+      fetchSlots();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to cancel slot");
+    }
+  };
+
+  const handleDisableSlot = async (id: string) => {
+    try {
+      await disableSlot(id);
+      toast.success("System slot disabled successfully");
+      fetchSlots();
+      if (
+        selectedSlot &&
+        (selectedSlot.id || (selectedSlot as any)._id) === id
+      ) {
+        setSelectedSlot({ ...selectedSlot, isDisabled: true });
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to disable slot");
+    }
+  };
+
+  const handleEnableSlot = async (id: string) => {
+    try {
+      await enableSlot(id);
+      toast.success("System slot enabled successfully");
+      fetchSlots();
+      if (
+        selectedSlot &&
+        (selectedSlot.id || (selectedSlot as any)._id) === id
+      ) {
+        setSelectedSlot({ ...selectedSlot, isDisabled: false });
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to enable slot");
     }
   };
 
@@ -221,6 +272,12 @@ const AdminBookings: React.FC = () => {
       return;
     }
 
+    // Determine if creating for all canteens
+    const isAllCanteens = targetCanteenId === "all-canteens";
+    const canteenIdsToCreate = isAllCanteens
+      ? (canteens.map((c) => c.id || c._id).filter(Boolean) as string[])
+      : [targetCanteenId];
+
     // 0b. Time range validation
     if (!newSlot.startTime || !newSlot.endTime) {
       toast.error("Please set both start time and end time.");
@@ -288,14 +345,40 @@ const AdminBookings: React.FC = () => {
     }
 
     try {
-      await apiCreateSlot({
-        date: selectedDate,
-        time: `${newSlot.startTime} - ${newSlot.endTime}`,
-        capacity: newSlot.capacity,
-        mealType: newSlot.mealType,
-        canteenId: newSlot.canteenId || selectedCanteenId,
-      });
-      toast.success("Slot created successfully");
+      // Create slots for all selected canteens
+      const promises = canteenIdsToCreate.map((canteenId) =>
+        apiCreateSlot({
+          date: selectedDate,
+          time: `${newSlot.startTime} - ${newSlot.endTime}`,
+          capacity: newSlot.capacity,
+          mealType: newSlot.mealType,
+          canteenId: canteenId,
+        }),
+      );
+
+      const results = await Promise.allSettled(promises);
+      const successCount = results.filter(
+        (r) => r.status === "fulfilled",
+      ).length;
+      const failCount = results.filter((r) => r.status === "rejected").length;
+
+      if (successCount > 0) {
+        toast.success(
+          isAllCanteens
+            ? `Created slot for ${successCount} canteen(s)` +
+                (failCount > 0 ? ` (${failCount} failed)` : "")
+            : "Slot created successfully",
+        );
+      }
+      if (failCount > 0 && successCount === 0) {
+        const firstError = results.find(
+          (r) => r.status === "rejected",
+        ) as PromiseRejectedResult;
+        toast.error(
+          firstError.reason?.response?.data?.message || "Failed to create slot",
+        );
+      }
+
       setIsCreateModalOpen(false);
       setNewSlot({
         startTime: "",
@@ -426,21 +509,35 @@ const AdminBookings: React.FC = () => {
                           slotId
                           ? "ring-2 ring-blue-500 ring-offset-1"
                           : "",
-                        status === "Cancelled"
-                          ? "bg-gray-100 border-gray-200 text-gray-400"
-                          : status === "Full"
-                            ? "bg-red-50 border-red-100 text-red-700"
-                            : status === "FastFilling"
-                              ? "bg-amber-50 border-amber-100 text-amber-700"
-                              : "bg-green-50 border-green-100 text-green-700",
+                        slot.isDisabled
+                          ? "bg-red-50 border-red-200 text-red-700"
+                          : status === "Cancelled"
+                            ? "bg-gray-100 border-gray-200 text-gray-400"
+                            : status === "Full"
+                              ? "bg-red-50 border-red-100 text-red-700"
+                              : status === "FastFilling"
+                                ? "bg-amber-50 border-amber-100 text-amber-700"
+                                : "bg-green-50 border-green-100 text-green-700",
                       )}
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-bold text-sm">
                           {getSlotDisplayTime(slot)}
                         </span>
-                        {status === "Cancelled" && <Ban size={14} />}
-                        {status === "Full" && <AlertCircle size={14} />}
+                        <div className="flex items-center gap-1">
+                          {slot.isSystemSlot && (
+                            <span className="bg-blue-100 text-blue-600 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+                              SYS
+                            </span>
+                          )}
+                          {slot.isDisabled && (
+                            <span className="bg-red-100 text-red-600 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+                              OFF
+                            </span>
+                          )}
+                          {status === "Cancelled" && <Ban size={14} />}
+                          {status === "Full" && <AlertCircle size={14} />}
+                        </div>
                       </div>
                       <div className="text-xs">
                         <span className="font-semibold text-lg">
@@ -454,6 +551,13 @@ const AdminBookings: React.FC = () => {
                       {slot.mealType && (
                         <div className="text-[10px] mt-1 opacity-60 uppercase font-medium">
                           {slot.mealType}
+                        </div>
+                      )}
+                      {slot.canteenId && slot.canteenId !== "default" && (
+                        <div className="text-[9px] mt-1 opacity-50 truncate">
+                          {canteens.find(
+                            (c) => (c.id || c._id) === slot.canteenId,
+                          )?.name || ""}
                         </div>
                       )}
                       {status !== "Cancelled" && slot.capacity > 0 && (
@@ -564,26 +668,88 @@ const AdminBookings: React.FC = () => {
                 )}
 
                 <div className="pt-6 border-t border-gray-100">
-                  <h4 className="text-sm font-semibold text-red-600 mb-2 flex items-center gap-2">
-                    <AlertTriangle size={16} />
-                    Emergency Zone
-                  </h4>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Deleting a slot will remove it from the schedule and notify
-                    booked users.
-                  </p>
-                  <Button
-                    className="w-full bg-red-600 hover:bg-red-700 text-white border-transparent"
-                    variant="danger"
-                    disabled={getSlotStatus(selectedSlot) === "Cancelled"}
-                    onClick={() =>
-                      handleCancelSlot(
-                        selectedSlot.id || (selectedSlot as any)._id,
-                      )
-                    }
-                  >
-                    Delete Slot
-                  </Button>
+                  {selectedSlot.isSystemSlot ? (
+                    <>
+                      <h4 className="text-sm font-semibold text-amber-600 mb-2 flex items-center gap-2">
+                        <Sliders size={16} />
+                        System Slot Controls
+                      </h4>
+                      <p className="text-xs text-gray-500 mb-3">
+                        System slots cannot be deleted. You can disable them to
+                        prevent new bookings, or cancel to close them
+                        completely.
+                      </p>
+                      <div className="space-y-2">
+                        {selectedSlot.isDisabled ? (
+                          <Button
+                            className="w-full bg-green-600 hover:bg-green-700 text-white border-transparent"
+                            onClick={() =>
+                              handleEnableSlot(
+                                selectedSlot.id || (selectedSlot as any)._id,
+                              )
+                            }
+                          >
+                            Enable Slot
+                          </Button>
+                        ) : (
+                          <Button
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white border-transparent"
+                            disabled={
+                              getSlotStatus(selectedSlot) === "Cancelled"
+                            }
+                            onClick={() =>
+                              handleDisableSlot(
+                                selectedSlot.id || (selectedSlot as any)._id,
+                              )
+                            }
+                          >
+                            Disable Slot
+                          </Button>
+                        )}
+                        <Button
+                          className="w-full bg-red-600 hover:bg-red-700 text-white border-transparent"
+                          variant="danger"
+                          disabled={getSlotStatus(selectedSlot) === "Cancelled"}
+                          onClick={() =>
+                            handleCancelSlot(
+                              selectedSlot.id || (selectedSlot as any)._id,
+                            )
+                          }
+                        >
+                          Cancel Slot
+                        </Button>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2 flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        {selectedSlot.isDisabled
+                          ? "This slot is disabled"
+                          : "This is a system slot"}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h4 className="text-sm font-semibold text-red-600 mb-2 flex items-center gap-2">
+                        <AlertTriangle size={16} />
+                        Emergency Zone
+                      </h4>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Deleting a slot will remove it from the schedule and
+                        notify booked users.
+                      </p>
+                      <Button
+                        className="w-full bg-red-600 hover:bg-red-700 text-white border-transparent"
+                        variant="danger"
+                        disabled={getSlotStatus(selectedSlot) === "Cancelled"}
+                        onClick={() =>
+                          handleDeleteSlot(
+                            selectedSlot.id || (selectedSlot as any)._id,
+                          )
+                        }
+                      >
+                        Delete Slot
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -626,6 +792,9 @@ const AdminBookings: React.FC = () => {
                   }
                 >
                   <option value="">Select canteen</option>
+                  <option value="all-canteens" className="font-bold">
+                    🏢 All Canteens (Create for All)
+                  </option>
                   {canteens.map((canteen) => {
                     const id = canteen.id || canteen._id || "";
                     return (
@@ -635,6 +804,12 @@ const AdminBookings: React.FC = () => {
                     );
                   })}
                 </select>
+                {(newSlot.canteenId === "all-canteens" ||
+                  (!newSlot.canteenId && !selectedCanteenId)) && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    ℹ️ This will create the same slot for all active canteens
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

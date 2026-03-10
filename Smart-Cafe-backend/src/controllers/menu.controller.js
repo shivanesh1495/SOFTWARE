@@ -1,7 +1,7 @@
-const { menuService } = require('../services');
-const catchAsync = require('../utils/catchAsync');
-const ApiResponse = require('../utils/ApiResponse');
-const { emitToAll } = require('../utils/socketEmitter');
+const { menuService } = require("../services");
+const catchAsync = require("../utils/catchAsync");
+const ApiResponse = require("../utils/ApiResponse");
+const { emitToAll } = require("../utils/socketEmitter");
 
 // ==================== MENU CONTROLLERS ====================
 
@@ -11,8 +11,8 @@ const { emitToAll } = require('../utils/socketEmitter');
  */
 const getMenus = catchAsync(async (req, res) => {
   const result = await menuService.getMenus(req.query);
-  
-  ApiResponse.ok(res, 'Menus retrieved', result);
+
+  ApiResponse.ok(res, "Menus retrieved", result);
 });
 
 /**
@@ -21,8 +21,8 @@ const getMenus = catchAsync(async (req, res) => {
  */
 const getMenuById = catchAsync(async (req, res) => {
   const menu = await menuService.getMenuById(req.params.id);
-  
-  ApiResponse.ok(res, 'Menu retrieved', menu);
+
+  ApiResponse.ok(res, "Menu retrieved", menu);
 });
 
 /**
@@ -31,9 +31,9 @@ const getMenuById = catchAsync(async (req, res) => {
  */
 const createMenu = catchAsync(async (req, res) => {
   const menu = await menuService.createMenu(req.body, req.userId);
-  
-  emitToAll('menu:updated', { action: 'created', menu });
-  ApiResponse.created(res, 'Menu created', menu);
+
+  emitToAll("menu:updated", { action: "created", menu });
+  ApiResponse.created(res, "Menu created", menu);
 });
 
 /**
@@ -42,9 +42,9 @@ const createMenu = catchAsync(async (req, res) => {
  */
 const updateMenu = catchAsync(async (req, res) => {
   const menu = await menuService.updateMenu(req.params.id, req.body);
-  
-  emitToAll('menu:updated', { action: 'updated', menu });
-  ApiResponse.ok(res, 'Menu updated', menu);
+
+  emitToAll("menu:updated", { action: "updated", menu });
+  ApiResponse.ok(res, "Menu updated", menu);
 });
 
 /**
@@ -53,9 +53,9 @@ const updateMenu = catchAsync(async (req, res) => {
  */
 const deleteMenu = catchAsync(async (req, res) => {
   await menuService.deleteMenu(req.params.id);
-  
-  emitToAll('menu:updated', { action: 'deleted', menuId: req.params.id });
-  ApiResponse.ok(res, 'Menu deleted');
+
+  emitToAll("menu:updated", { action: "deleted", menuId: req.params.id });
+  ApiResponse.ok(res, "Menu deleted");
 });
 
 // ==================== MENU ITEM CONTROLLERS ====================
@@ -66,8 +66,8 @@ const deleteMenu = catchAsync(async (req, res) => {
  */
 const getAllMenuItems = catchAsync(async (req, res) => {
   const items = await menuService.getAllMenuItems(req.query);
-  
-  ApiResponse.ok(res, 'Menu items retrieved', items);
+
+  ApiResponse.ok(res, "Menu items retrieved", items);
 });
 
 /**
@@ -76,8 +76,8 @@ const getAllMenuItems = catchAsync(async (req, res) => {
  */
 const getMenuItemById = catchAsync(async (req, res) => {
   const item = await menuService.getMenuItemById(req.params.id);
-  
-  ApiResponse.ok(res, 'Menu item retrieved', item);
+
+  ApiResponse.ok(res, "Menu item retrieved", item);
 });
 
 /**
@@ -86,9 +86,9 @@ const getMenuItemById = catchAsync(async (req, res) => {
  */
 const createMenuItem = catchAsync(async (req, res) => {
   const item = await menuService.createMenuItem(req.body);
-  
-  emitToAll('menu:updated', { action: 'item_created', item });
-  ApiResponse.created(res, 'Menu item created', item);
+
+  emitToAll("menu:updated", { action: "item_created", item });
+  ApiResponse.created(res, "Menu item created", item);
 });
 
 /**
@@ -97,9 +97,9 @@ const createMenuItem = catchAsync(async (req, res) => {
  */
 const updateMenuItem = catchAsync(async (req, res) => {
   const item = await menuService.updateMenuItem(req.params.id, req.body);
-  
-  emitToAll('menu:updated', { action: 'item_updated', item });
-  ApiResponse.ok(res, 'Menu item updated', item);
+
+  emitToAll("menu:updated", { action: "item_updated", item });
+  ApiResponse.ok(res, "Menu item updated", item);
 });
 
 /**
@@ -108,9 +108,9 @@ const updateMenuItem = catchAsync(async (req, res) => {
  */
 const deleteMenuItem = catchAsync(async (req, res) => {
   await menuService.deleteMenuItem(req.params.id);
-  
-  emitToAll('menu:updated', { action: 'item_deleted', itemId: req.params.id });
-  ApiResponse.ok(res, 'Menu item deleted');
+
+  emitToAll("menu:updated", { action: "item_deleted", itemId: req.params.id });
+  ApiResponse.ok(res, "Menu item deleted");
 });
 
 /**
@@ -119,9 +119,13 @@ const deleteMenuItem = catchAsync(async (req, res) => {
  */
 const toggleItemAvailability = catchAsync(async (req, res) => {
   const item = await menuService.toggleItemAvailability(req.params.id);
-  
-  emitToAll('menu:updated', { action: 'item_toggled', item });
-  ApiResponse.ok(res, `Item is now ${item.isAvailable ? 'available' : 'unavailable'}`, item);
+
+  emitToAll("menu:updated", { action: "item_toggled", item });
+  ApiResponse.ok(
+    res,
+    `Item is now ${item.isAvailable ? "available" : "unavailable"}`,
+    item,
+  );
 });
 
 module.exports = {
@@ -131,7 +135,7 @@ module.exports = {
   createMenu,
   updateMenu,
   deleteMenu,
-  
+
   // Menu Items
   getAllMenuItems,
   getMenuItemById,

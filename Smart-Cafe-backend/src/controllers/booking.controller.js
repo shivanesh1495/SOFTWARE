@@ -87,7 +87,10 @@ const completeBooking = catchAsync(async (req, res) => {
  * GET /api/bookings/stats
  */
 const getBookingStats = catchAsync(async (req, res) => {
-  const stats = await bookingService.getBookingStats(req.query.date, req.query.canteenId);
+  const stats = await bookingService.getBookingStats(
+    req.query.date,
+    req.query.canteenId,
+  );
 
   ApiResponse.ok(res, "Booking statistics retrieved", stats);
 });

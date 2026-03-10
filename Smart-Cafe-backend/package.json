@@ -11,7 +11,9 @@
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --detectOpenHandles --forceExit",
-    "seed": "node src/scripts/seed.js"
+    "seed": "node src/scripts/seed.js",
+    "seed:slots": "node seed_system_slots.js",
+    "seed:daily": "node seed_system_slots.js --daily"
   },
   "keywords": [
     "express",

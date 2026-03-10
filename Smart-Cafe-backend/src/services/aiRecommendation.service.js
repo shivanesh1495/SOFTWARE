@@ -4,11 +4,8 @@ const config = require("../config");
 const { Booking, MenuItem } = require("../models");
 
 const getRecommendations = async (userId, currentTimeRange) => {
-  if (!config.gemini.apiKey) {
-    throw ApiError.badRequest(
-      "Gemini API key is not configured on the server. Please add GEMINI_API_KEY.",
-    );
-  }
+  // Check if Gemini API key is configured
+  const hasGeminiKey = config.gemini && config.gemini.apiKey;
 
   // 1. Fetch user's recent bookings to understand preferences
   const recentBookings = await Booking.find({ user: userId })
@@ -43,6 +40,28 @@ const getRecommendations = async (userId, currentTimeRange) => {
 
   if (availableItems.length === 0) {
     return []; // No items to recommend
+  }
+
+  // If no API key, use fallback random selection
+  if (!hasGeminiKey) {
+    console.log("Gemini API key not configured, using random recommendations");
+    const genericReasons = [
+      "Popular choice among students",
+      "Highly rated by our community",
+      "Fresh and delicious today",
+      "Chef's special recommendation",
+      "Try something new!",
+      "Best seller this week",
+      "Perfect for your meal time",
+      "Nutritious and tasty",
+    ];
+    const shuffled = [...availableItems].sort(() => 0.5 - Math.random());
+    return shuffled
+      .slice(0, Math.min(5, availableItems.length))
+      .map((item, index) => ({
+        item: item,
+        reason: genericReasons[index % genericReasons.length],
+      }));
   }
 
   // Optimize token usage by sending only IDs and Names
@@ -136,11 +155,7 @@ const getRecommendations = async (userId, currentTimeRange) => {
 };
 
 const getDietRecommendations = async (dietType) => {
-  if (!config.gemini.apiKey) {
-    throw ApiError.badRequest(
-      "Gemini API key is not configured on the server. Please add GEMINI_API_KEY.",
-    );
-  }
+  const hasGeminiKey = config.gemini && config.gemini.apiKey;
 
   const availableItems = await MenuItem.find({ isAvailable: true }).select(
     "itemName description dietaryType price allergens id _id",
@@ -150,6 +165,26 @@ const getDietRecommendations = async (dietType) => {
     return {
       recommendations: [],
       summary: "No menu items are currently available.",
+    };
+  }
+
+  // If no API key, use fallback random selection
+  if (!hasGeminiKey) {
+    console.log(
+      "Gemini API key not configured, using random diet recommendations",
+    );
+    const shuffled = [...availableItems].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, Math.min(5, availableItems.length));
+
+    return {
+      recommendations: selected.map((item) => ({
+        id: item._id || item.id,
+        name: item.itemName,
+        reason: `Suitable for ${dietType} diet`,
+        calories_est: 300 + Math.floor(Math.random() * 400), // Random estimate 300-700
+      })),
+      summary: `We've selected some items that may fit your ${dietType} dietary preferences.`,
+      fallback: true, // Indicate this is a fallback response
     };
   }
 

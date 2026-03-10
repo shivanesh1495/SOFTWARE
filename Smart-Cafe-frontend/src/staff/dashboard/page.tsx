@@ -18,28 +18,30 @@ const StaffDashboard: React.FC = () => {
   const [, setLoading] = useState(true);
 
   // We'll manage assignedCanteenId here, defaulting to auth user's but updating from API
-  const [assignedCanteenId, setAssignedCanteenId] = useState<string>((user as any)?.canteenId || ""); 
+  const [assignedCanteenId, setAssignedCanteenId] = useState<string>(
+    (user as any)?.canteenId || "",
+  );
   const [assignedCanteenName, setAssignedCanteenName] = useState<string>("");
 
   useEffect(() => {
     // 1. Fetch latest profile to check for new assignment
     const fetchProfile = async () => {
-        try {
-            const profile = await AuthService.getProfile();
-            if (profile && (profile as any).canteenId) {
-                setAssignedCanteenId((profile as any).canteenId);
-            }
-        } catch (e) {
-            console.error("Failed to refresh profile", e);
+      try {
+        const profile = await AuthService.getProfile();
+        if (profile && (profile as any).canteenId) {
+          setAssignedCanteenId((profile as any).canteenId);
         }
+      } catch (e) {
+        console.error("Failed to refresh profile", e);
+      }
     };
     fetchProfile();
 
     loadCanteens();
     // Poll occupancy every 30 seconds
     const interval = setInterval(() => {
-        loadCanteens();
-        fetchProfile(); // Also poll profile for re-assignment updates
+      loadCanteens();
+      fetchProfile(); // Also poll profile for re-assignment updates
     }, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -49,7 +51,7 @@ const StaffDashboard: React.FC = () => {
     loadCanteens();
   }, []);
   useRealtimeRefresh(
-    ['booking:updated', 'stock:updated', 'notification:broadcast'],
+    ["booking:updated", "stock:updated", "notification:broadcast"],
     handleRealtimeEvent,
   );
   const loadCanteens = async () => {
@@ -58,9 +60,7 @@ const StaffDashboard: React.FC = () => {
       setCanteens(data);
       // Resolve assigned canteen name
       if (assignedCanteenId) {
-        const match = data.find(
-          (c) => (c.id || c._id) === assignedCanteenId
-        );
+        const match = data.find((c) => (c.id || c._id) === assignedCanteenId);
         setAssignedCanteenName(match?.name || "Unknown Canteen");
       }
     } catch (error) {
@@ -153,7 +153,7 @@ const StaffDashboard: React.FC = () => {
           <div className="flex-none">
             <StaffAnnouncements />
           </div>
-           <div className="flex-none">
+          <div className="flex-none">
             <ServingRules />
           </div>
           <div className="flex-1 overflow-hidden">

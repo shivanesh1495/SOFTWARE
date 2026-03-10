@@ -40,6 +40,16 @@ const slotSchema = new mongoose.Schema(
       type: String,
       default: "default",
     },
+    isSystemSlot: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isDisabled: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

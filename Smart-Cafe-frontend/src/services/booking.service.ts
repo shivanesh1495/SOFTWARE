@@ -12,6 +12,8 @@ export interface Slot {
   booked: number;
   available: number;
   status: "AVAILABLE" | "FULL" | "CANCELLED";
+  isSystemSlot?: boolean;
+  isDisabled?: boolean;
 }
 
 export interface BookingItem {
@@ -191,6 +193,22 @@ export const cancelSlotById = async (slotId: string): Promise<Slot> => {
  */
 export const deleteSlot = async (slotId: string): Promise<void> => {
   await api.delete(`/slots/${slotId}`);
+};
+
+/**
+ * Disable a system slot (Management only)
+ */
+export const disableSlot = async (slotId: string): Promise<Slot> => {
+  const response = await api.post(`/slots/${slotId}/disable`);
+  return normalizeSlot(response.data.data);
+};
+
+/**
+ * Enable a system slot (Management only)
+ */
+export const enableSlot = async (slotId: string): Promise<Slot> => {
+  const response = await api.post(`/slots/${slotId}/enable`);
+  return normalizeSlot(response.data.data);
 };
 
 // ========== BOOKING ENDPOINTS ==========

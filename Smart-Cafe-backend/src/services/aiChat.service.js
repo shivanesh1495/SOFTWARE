@@ -4,10 +4,17 @@ const config = require("../config");
 const { Canteen, MenuItem, User } = require("../models");
 
 const chat = async (messages, userId) => {
-  if (!config.gemini.apiKey) {
-    throw ApiError.badRequest(
-      "Gemini API key is not configured on the server. Please add GEMINI_API_KEY.",
+  const hasGeminiKey = config.gemini && config.gemini.apiKey;
+
+  if (!hasGeminiKey) {
+    console.log(
+      "Gemini API key not configured, returning fallback chat response",
     );
+    return {
+      reply:
+        "I'm currently unavailable. Please try again later or contact support for assistance.",
+      fallback: true,
+    };
   }
 
   // 1. Fetch system context
