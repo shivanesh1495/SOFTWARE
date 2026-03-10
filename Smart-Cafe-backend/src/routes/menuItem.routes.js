@@ -5,6 +5,7 @@ const {
   authenticate,
   optionalAuth,
   isManagement,
+  isStaff,
   validate,
 } = require("../middlewares");
 const { menuValidation } = require("../validations");
@@ -27,6 +28,13 @@ router.patch(
   isManagement,
   validate(menuValidation.updateMenuItem),
   menuController.updateMenuItem,
+);
+router.patch(
+  "/:id/quantity",
+  authenticate,
+  isStaff,
+  validate(menuValidation.updateMenuItemQuantity),
+  menuController.updateMenuItemQuantity,
 );
 router.delete(
   "/:id",

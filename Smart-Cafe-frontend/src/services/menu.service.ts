@@ -5,6 +5,7 @@ export interface MenuItem {
   id: string;
   _id?: string;
   itemName: string;
+  availableQuantity?: number;
   category: string; // MEAL TYPE: Breakfast, Lunch, etc.
   dietaryType: string; // Veg, Non-Veg, etc.
   description?: string;
@@ -62,6 +63,7 @@ export const getMenuItems = async (params?: {
   category?: string;
   isVeg?: boolean;
   isAvailable?: boolean;
+  onlyOrderable?: boolean;
   dietaryType?: string;
   canteen?: string;
   excludeAllergens?: string;
@@ -129,6 +131,19 @@ export const updateMenuItem = async (
   data: Partial<MenuItem>,
 ): Promise<MenuItem> => {
   const response = await api.patch(`/menu-items/${itemId}`, data);
+  return response.data.data;
+};
+
+/**
+ * Update menu item available quantity (Staff/Management)
+ */
+export const updateMenuItemQuantity = async (
+  itemId: string,
+  availableQuantity: number,
+): Promise<MenuItem> => {
+  const response = await api.patch(`/menu-items/${itemId}/quantity`, {
+    availableQuantity,
+  });
   return response.data.data;
 };
 

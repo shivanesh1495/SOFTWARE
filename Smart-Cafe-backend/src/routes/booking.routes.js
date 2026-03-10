@@ -35,6 +35,12 @@ router.get("/scans", isStaff, bookingController.getScanHistory);
 router.post("/walkin", isStaff, bookingController.createWalkinBooking);
 router.post("/:id/complete", isStaff, bookingController.completeBooking);
 router.post("/:id/no-show", isStaff, bookingController.markNoShow);
+router.patch(
+  "/:id/items",
+  isStaff,
+  validate(bookingValidation.replaceBookingItems),
+  bookingController.replaceBookingItems,
+);
 
 // Management routes
 router.get(

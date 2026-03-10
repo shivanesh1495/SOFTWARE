@@ -55,6 +55,7 @@ const createMenuItem = Joi.object({
     itemName: Joi.string().max(100).required(),
     description: Joi.string().max(500).allow(""),
     price: Joi.number().min(0).required(),
+    availableQuantity: Joi.number().integer().min(0).default(100),
     isVeg: Joi.boolean().default(true),
     category: Joi.string()
       .valid(...CATEGORIES)
@@ -85,6 +86,7 @@ const updateMenuItem = Joi.object({
     itemName: Joi.string().max(100),
     description: Joi.string().max(500).allow(""),
     price: Joi.number().min(0),
+    availableQuantity: Joi.number().integer().min(0),
     isVeg: Joi.boolean(),
     category: Joi.string().valid(...CATEGORIES),
     dietaryType: Joi.string().valid(...DIETARY_TYPES),
@@ -99,10 +101,20 @@ const updateMenuItem = Joi.object({
   }).min(1),
 });
 
+const updateMenuItemQuantity = Joi.object({
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    availableQuantity: Joi.number().integer().min(0).required(),
+  }),
+});
+
 module.exports = {
   createMenu,
   updateMenu,
   getMenus,
   createMenuItem,
   updateMenuItem,
+  updateMenuItemQuantity,
 };

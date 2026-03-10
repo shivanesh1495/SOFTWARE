@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Button from "../../components/common/Button";
+import Modal from "../../components/common/Modal";
 import {
   Camera,
   CheckCircle,
@@ -7,15 +8,26 @@ import {
   Clock,
   User,
   Loader2,
+  Shuffle,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import * as bookingService from "../../services/booking.service";
 import type { Booking } from "../../services/booking.service";
+import * as menuService from "../../services/menu.service";
+import type { MenuItem } from "../../services/menu.service";
 import toast from "react-hot-toast";
 import {
   decodeTokenPayload,
   type TokenPayload,
 } from "../../utils/tokenPayload";
 import { getPublicSettings } from "../../services/system.service";
+
+interface EditableBookingItem {
+  menuItemId: string;
+  quantity: number;
+  portionSize: "Regular" | "Small";
+}
 
 const StaffScanToken: React.FC = () => {
   const [tokenInput, setTokenInput] = useState("");
@@ -28,6 +40,11 @@ const StaffScanToken: React.FC = () => {
   const [payload, setPayload] = useState<TokenPayload | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [onlineBookingEnabled, setOnlineBookingEnabled] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editableItems, setEditableItems] = useState<EditableBookingItem[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loadingMenuItems, setLoadingMenuItems] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -121,6 +138,116 @@ const StaffScanToken: React.FC = () => {
     }, 2000);
   };
 
+  const getMenuItemId = (entry: any): string => {
+    if (!entry) return "";
+    if (typeof entry === "string") return entry;
+    return entry.id || entry._id || "";
+  };
+
+  const getMenuItemPrice = (
+    menuItemId: string,
+    portionSize: "Regular" | "Small",
+  ) => {
+    const menuItem = menuItems.find(
+      (entry) => (entry.id || entry._id) === menuItemId,
+    );
+    if (!menuItem) return 0;
+
+    const basePrice = Number(menuItem.price || 0);
+    return portionSize === "Small" ? Math.round(basePrice * 0.8) : basePrice;
+  };
+
+  const existingTotal = Number(booking?.totalAmount || 0);
+  const newTotal = editableItems.reduce((sum, item) => {
+    const price = getMenuItemPrice(item.menuItemId, item.portionSize);
+    return sum + price * item.quantity;
+  }, 0);
+  const isSameTotal = newTotal === existingTotal;
+
+  const openEditModal = async () => {
+    if (!booking) return;
+
+    const mappedItems: EditableBookingItem[] = (booking.items || []).map(
+      (item: any) => ({
+        menuItemId: getMenuItemId(item.menuItem),
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        portionSize: item.portionSize === "Small" ? "Small" : "Regular",
+      }),
+    );
+
+    setEditableItems(mappedItems.length > 0 ? mappedItems : []);
+    setIsEditModalOpen(true);
+
+    try {
+      setLoadingMenuItems(true);
+      const items = await menuService.getMenuItems();
+      setMenuItems(items);
+    } catch (error) {
+      console.error("Failed to load menu items for replacement:", error);
+      toast.error("Failed to load available dishes");
+    } finally {
+      setLoadingMenuItems(false);
+    }
+  };
+
+  const addEditableRow = () => {
+    const firstMenuItemId = menuItems[0]?.id || menuItems[0]?._id || "";
+    if (!firstMenuItemId) return;
+
+    setEditableItems((prev) => [
+      ...prev,
+      {
+        menuItemId: firstMenuItemId,
+        quantity: 1,
+        portionSize: "Regular",
+      },
+    ]);
+  };
+
+  const updateEditableRow = (
+    index: number,
+    patch: Partial<EditableBookingItem>,
+  ) => {
+    setEditableItems((prev) =>
+      prev.map((entry, idx) =>
+        idx === index ? { ...entry, ...patch } : entry,
+      ),
+    );
+  };
+
+  const removeEditableRow = (index: number) => {
+    setEditableItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const submitReplacement = async () => {
+    if (!booking?.id) return;
+    if (editableItems.length === 0) {
+      toast.error("Add at least one dish");
+      return;
+    }
+
+    if (!isSameTotal) {
+      toast.error("Replacement total must match original total");
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const updated = await bookingService.replaceBookingItems(booking.id, {
+        items: editableItems,
+        enforceSameTotal: true,
+      });
+      setBooking(updated);
+      setIsEditModalOpen(false);
+      toast.success("Order items updated");
+    } catch (error: any) {
+      console.error("Failed to replace booking items:", error);
+      toast.error(error?.response?.data?.message || "Failed to update order");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header>
@@ -169,7 +296,9 @@ const StaffScanToken: React.FC = () => {
                 />
                 <Button
                   onClick={handleLookup}
-                  disabled={!tokenInput.trim() || lookingUp || !onlineBookingEnabled}
+                  disabled={
+                    !tokenInput.trim() || lookingUp || !onlineBookingEnabled
+                  }
                   isLoading={lookingUp}
                 >
                   Verify
@@ -252,13 +381,23 @@ const StaffScanToken: React.FC = () => {
                 </div>
               </div>
 
-              <Button
-                className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white border-transparent"
-                onClick={handleConfirmEntry}
-                isLoading={confirming}
-              >
-                Confirm Entry & Complete
-              </Button>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={openEditModal}
+                  className="w-full"
+                >
+                  <Shuffle size={16} className="mr-2" />
+                  Replace Dish (Same Total)
+                </Button>
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 text-white border-transparent"
+                  onClick={handleConfirmEntry}
+                  isLoading={confirming}
+                >
+                  Confirm Entry & Complete
+                </Button>
+              </div>
             </div>
           )}
 
@@ -385,6 +524,146 @@ const StaffScanToken: React.FC = () => {
           )}
         </div>
       </div>
+
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Replace Order Items"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setIsEditModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitReplacement}
+              isLoading={savingEdit}
+              disabled={
+                loadingMenuItems || editableItems.length === 0 || !isSameTotal
+              }
+            >
+              Save Replacement
+            </Button>
+          </div>
+        }
+      >
+        {loadingMenuItems ? (
+          <div className="flex items-center justify-center py-8 text-gray-500">
+            <Loader2 className="animate-spin mr-2" size={18} />
+            Loading available dishes...
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
+              Replacement is allowed only when total amount is unchanged.
+            </div>
+
+            <div className="space-y-3">
+              {editableItems.map((item, index) => {
+                const linePrice = getMenuItemPrice(
+                  item.menuItemId,
+                  item.portionSize,
+                );
+                return (
+                  <div
+                    key={`edit-item-${index}`}
+                    className="grid grid-cols-12 gap-2 items-center"
+                  >
+                    <select
+                      value={item.menuItemId}
+                      onChange={(e) =>
+                        updateEditableRow(index, {
+                          menuItemId: e.target.value,
+                        })
+                      }
+                      className="col-span-5 border border-gray-200 rounded-lg px-2 py-2 text-sm"
+                    >
+                      {menuItems.map((menuItem) => {
+                        const id = menuItem.id || menuItem._id || "";
+                        return (
+                          <option key={id} value={id}>
+                            {menuItem.itemName} (₹{menuItem.price || 0})
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <input
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) =>
+                        updateEditableRow(index, {
+                          quantity: Math.max(1, Number(e.target.value) || 1),
+                        })
+                      }
+                      className="col-span-2 border border-gray-200 rounded-lg px-2 py-2 text-sm"
+                    />
+
+                    <select
+                      value={item.portionSize}
+                      onChange={(e) =>
+                        updateEditableRow(index, {
+                          portionSize:
+                            e.target.value === "Small" ? "Small" : "Regular",
+                        })
+                      }
+                      className="col-span-3 border border-gray-200 rounded-lg px-2 py-2 text-sm"
+                    >
+                      <option value="Regular">Regular</option>
+                      <option value="Small">Small</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => removeEditableRow(index)}
+                      className="col-span-2 inline-flex items-center justify-center p-2 rounded-lg text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+
+                    <p className="col-span-12 text-xs text-gray-500">
+                      Line Total: ₹{linePrice * item.quantity}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={addEditableRow}
+              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+            >
+              <Plus size={14} /> Add Dish
+            </button>
+
+            <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Existing Total</span>
+                <span className="font-semibold">₹{existingTotal}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">New Total</span>
+                <span className="font-semibold">₹{newTotal}</span>
+              </div>
+              <div
+                className={
+                  isSameTotal
+                    ? "text-green-700 text-xs"
+                    : "text-red-700 text-xs"
+                }
+              >
+                {isSameTotal
+                  ? "Total matches. You can save replacement."
+                  : "New total must exactly match existing total."}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

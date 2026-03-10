@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Button from "../../components/common/Button";
 import Modal from "../../components/common/Modal";
@@ -20,6 +20,7 @@ import { getPublicSettings } from "../../services/system.service";
 import { useCart } from "../../store/cart.store";
 import toast from "react-hot-toast";
 import { getOperatingStatus } from "../../utils/serviceSchedule";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 
 const StudentSlots: React.FC = () => {
   const navigate = useNavigate();
@@ -111,7 +112,7 @@ const StudentSlots: React.FC = () => {
     }
   }, [queryCanteenId]);
 
-  const fetchSlots = async () => {
+  const fetchSlots = useCallback(async () => {
     setLoading(true);
     try {
       const data = activeCanteenId
@@ -124,10 +125,21 @@ const StudentSlots: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeCanteenId]);
+
+  useRealtimeRefresh(["booking:updated", "slot:updated"], () => {
+    fetchSlots();
+  });
 
   const getSlotStatus = (slot: Slot) => {
-    if (slot.status === "CANCELLED" || slot.status === "FULL") return "full";
+    const statusValue = String(slot.status || "").toLowerCase();
+    if (
+      slot.isDisabled ||
+      statusValue === "cancelled" ||
+      statusValue === "full"
+    ) {
+      return "full";
+    }
     const ratio = slot.booked / slot.capacity;
     if (ratio >= 1) return "full";
     if (ratio >= 0.8) return "filling-fast";

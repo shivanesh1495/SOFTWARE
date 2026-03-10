@@ -53,6 +53,11 @@ const createBooking = catchAsync(async (req, res) => {
   const booking = await bookingService.createBooking(req.userId, req.body);
 
   emitToAll("booking:updated", { action: "created", booking });
+  emitToAll("menu:updated", {
+    action: "stock_changed",
+    source: "booking_created",
+    bookingId: booking.id,
+  });
   ApiResponse.created(res, "Booking created", booking);
 });
 
@@ -68,6 +73,11 @@ const cancelBooking = catchAsync(async (req, res) => {
   );
 
   emitToAll("booking:updated", { action: "cancelled", booking });
+  emitToAll("menu:updated", {
+    action: "stock_changed",
+    source: "booking_cancelled",
+    bookingId: booking.id,
+  });
   ApiResponse.ok(res, "Booking cancelled", booking);
 });
 
@@ -103,6 +113,11 @@ const createWalkinBooking = catchAsync(async (req, res) => {
   const booking = await bookingService.createWalkinBooking(req.body);
 
   emitToAll("booking:updated", { action: "walkin", booking });
+  emitToAll("menu:updated", {
+    action: "stock_changed",
+    source: "walkin_created",
+    bookingId: booking.id,
+  });
   ApiResponse.created(res, "Walk-in booking created", booking);
 });
 
@@ -160,6 +175,21 @@ const rescheduleBooking = catchAsync(async (req, res) => {
   ApiResponse.ok(res, "Booking rescheduled", booking);
 });
 
+const replaceBookingItems = catchAsync(async (req, res) => {
+  const booking = await bookingService.replaceBookingItems(
+    req.params.id,
+    req.body,
+  );
+
+  emitToAll("booking:updated", { action: "items_replaced", booking });
+  emitToAll("menu:updated", {
+    action: "stock_changed",
+    source: "booking_items_replaced",
+    bookingId: booking.id,
+  });
+  ApiResponse.ok(res, "Booking items updated", booking);
+});
+
 const getTokenStatus = catchAsync(async (req, res) => {
   const result = await bookingService.getTokenStatus(req.params.tokenNumber);
   ApiResponse.ok(res, "Token status retrieved", result);
@@ -180,5 +210,6 @@ module.exports = {
   getScanHistory,
   getQueueInfo,
   rescheduleBooking,
+  replaceBookingItems,
   getTokenStatus,
 };

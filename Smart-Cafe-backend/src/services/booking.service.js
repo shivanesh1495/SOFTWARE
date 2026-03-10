@@ -203,6 +203,145 @@ const ensureSameDayBooking = (slotDate) => {
   }
 };
 
+const aggregateRequestedItems = (items = []) => {
+  const grouped = new Map();
+
+  for (const item of items) {
+    const menuItemId = (item?.menuItemId || item?.menuItem || "").toString();
+    if (!menuItemId) continue;
+
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    grouped.set(menuItemId, (grouped.get(menuItemId) || 0) + quantity);
+  }
+
+  return Array.from(grouped.entries()).map(([menuItemId, quantity]) => ({
+    menuItemId,
+    quantity,
+  }));
+};
+
+const getMenuItemsByRequest = async (requestedItems) => {
+  const ids = requestedItems.map((item) => item.menuItemId);
+  const menuItems = await MenuItem.find({
+    _id: { $in: ids },
+  });
+
+  const byId = new Map(menuItems.map((item) => [item._id.toString(), item]));
+
+  for (const { menuItemId } of requestedItems) {
+    if (!byId.has(menuItemId)) {
+      throw ApiError.badRequest(`Menu item not found: ${menuItemId}`);
+    }
+  }
+
+  return byId;
+};
+
+const reserveMenuStock = async (requestedItems, menuItemsById) => {
+  const reserved = [];
+
+  try {
+    for (const { menuItemId, quantity } of requestedItems) {
+      let menuItem = menuItemsById.get(menuItemId);
+
+      if (!menuItem.isAvailable) {
+        throw ApiError.badRequest(`${menuItem.itemName} is not available`);
+      }
+
+      // Backward compatibility: older records may not have availableQuantity.
+      // Initialize them to default stock so ordering is not blocked.
+      if (
+        menuItem.availableQuantity === null ||
+        menuItem.availableQuantity === undefined
+      ) {
+        const initializedItem = await MenuItem.findByIdAndUpdate(
+          menuItemId,
+          { $set: { availableQuantity: 100 } },
+          { new: true },
+        );
+
+        if (!initializedItem) {
+          throw ApiError.badRequest(`Menu item not found: ${menuItemId}`);
+        }
+
+        menuItem = initializedItem;
+        menuItemsById.set(menuItemId, initializedItem);
+      }
+
+      const availableQuantity = Number(menuItem.availableQuantity || 0);
+      if (availableQuantity < quantity) {
+        throw ApiError.badRequest(
+          `${menuItem.itemName} has only ${availableQuantity} left`,
+        );
+      }
+
+      const updated = await MenuItem.findOneAndUpdate(
+        {
+          _id: menuItemId,
+          isAvailable: true,
+          availableQuantity: { $gte: quantity },
+        },
+        {
+          $inc: { availableQuantity: -quantity },
+        },
+        { new: true },
+      );
+
+      if (!updated) {
+        throw ApiError.conflict(
+          `${menuItem.itemName} stock changed. Please refresh and try again.`,
+        );
+      }
+
+      if ((updated.availableQuantity || 0) <= 0 && updated.isAvailable) {
+        await MenuItem.findByIdAndUpdate(menuItemId, { isAvailable: false });
+      }
+
+      reserved.push({ menuItemId, quantity });
+    }
+
+    return reserved;
+  } catch (error) {
+    if (reserved.length > 0) {
+      await Promise.all(
+        reserved.map(({ menuItemId, quantity }) =>
+          MenuItem.findByIdAndUpdate(menuItemId, {
+            $inc: { availableQuantity: quantity },
+            $set: { isAvailable: true },
+          }),
+        ),
+      );
+    }
+
+    throw error;
+  }
+};
+
+const restoreMenuStockFromItems = async (items = []) => {
+  const grouped = new Map();
+
+  for (const item of items) {
+    const menuItemId = (item?.menuItem?._id || item?.menuItem || "").toString();
+    if (!menuItemId) continue;
+
+    const quantity = Math.max(0, Number(item.quantity) || 0);
+    if (quantity === 0) continue;
+
+    grouped.set(menuItemId, (grouped.get(menuItemId) || 0) + quantity);
+  }
+
+  if (grouped.size === 0) return;
+
+  await Promise.all(
+    Array.from(grouped.entries()).map(([menuItemId, quantity]) =>
+      MenuItem.findByIdAndUpdate(menuItemId, {
+        $inc: { availableQuantity: quantity },
+        $set: { isAvailable: true },
+      }),
+    ),
+  );
+};
+
 /**
  * Get user's bookings
  */
@@ -349,14 +488,21 @@ const createBooking = async (userId, data) => {
     // Fetch reserved counts
     const facultyReserved = await getPolicyNumber("FACULTY_RESERVED_SLOTS", 0);
     const guestReserved = await getPolicyNumber("GUEST_RESERVED_SLOTS", 0);
-    const totalReserved = facultyReserved + guestReserved;
+    const totalReserved = Math.max(0, facultyReserved + guestReserved);
+
+    // Prevent policy misconfiguration from blocking all student bookings.
+    // Keep at least 1 slot bookable by students until the slot is actually full.
+    const effectiveReserved = Math.min(
+      totalReserved,
+      Math.max(0, slot.capacity - 1),
+    );
 
     // Calculate effective capacity for students
-    const studentCapacity = Math.max(0, slot.capacity - totalReserved);
+    const studentCapacity = slot.capacity - effectiveReserved;
 
     if (slot.booked >= studentCapacity) {
       throw ApiError.badRequest(
-        "Slot is full (Reserved slots are for Faculty/Guests only)",
+        `Slot is full for student bookings. Student allocation: ${studentCapacity}/${slot.capacity}.`,
       );
     }
   }
@@ -440,21 +586,19 @@ const createBooking = async (userId, data) => {
     throw ApiError.conflict("You already have a booking for this slot");
   }
 
+  const requestedItems = aggregateRequestedItems(data.items || []);
+  if (requestedItems.length === 0) {
+    throw ApiError.badRequest("At least one menu item is required");
+  }
+
+  const menuItemsById = await getMenuItemsByRequest(requestedItems);
+
   // Fetch menu items and calculate prices
   const bookingItems = [];
   let totalAmount = 0;
 
-  for (const item of data.items) {
-    const menuItem = await MenuItem.findById(item.menuItemId);
-
-    if (!menuItem) {
-      throw ApiError.badRequest(`Menu item not found: ${item.menuItemId}`);
-    }
-
-    if (!menuItem.isAvailable) {
-      throw ApiError.badRequest(`${menuItem.itemName} is not available`);
-    }
-
+  for (const item of requestedItems) {
+    const menuItem = menuItemsById.get(item.menuItemId);
     const quantity = item.quantity || 1;
     const itemTotal = menuItem.price * quantity;
 
@@ -467,31 +611,63 @@ const createBooking = async (userId, data) => {
     totalAmount += itemTotal;
   }
 
-  // Create booking
-  const booking = await Booking.create({
-    user: userId,
-    slot: data.slotId,
-    items: bookingItems,
-    totalAmount,
-    notes: data.notes,
-  });
+  let reservedStock = [];
+  let booking = null;
+  let slotIncremented = false;
 
-  // Increment slot booking count
-  await slotService.incrementBooking(data.slotId);
+  try {
+    reservedStock = await reserveMenuStock(requestedItems, menuItemsById);
 
-  // Populate and return
-  await booking.populate([{ path: "slot" }, { path: "items.menuItem" }]);
+    booking = await Booking.create({
+      user: userId,
+      slot: data.slotId,
+      items: bookingItems,
+      totalAmount,
+      notes: data.notes,
+    });
 
-  // Send confirmation notification
-  await notificationService.createNotification({
-    userId,
-    title: "Booking Confirmed!",
-    message: `Your booking (Token: ${booking.tokenNumber}) for ${slot.time} is confirmed.`,
-    type: "order",
-    link: `/student/booking?id=${booking._id}`,
-  });
+    await slotService.incrementBooking(data.slotId);
+    slotIncremented = true;
 
-  return booking;
+    await booking.populate([{ path: "slot" }, { path: "items.menuItem" }]);
+
+    try {
+      await notificationService.createNotification({
+        userId,
+        title: "Booking Confirmed!",
+        message: `Your booking (Token: ${booking.tokenNumber}) for ${slot.time} is confirmed.`,
+        type: "order",
+        link: `/student/booking?id=${booking._id}`,
+      });
+    } catch (notificationError) {
+      // Booking creation should not fail if notification fails.
+      console.error(
+        "Failed to send booking confirmation notification:",
+        notificationError,
+      );
+    }
+
+    return booking;
+  } catch (error) {
+    if (booking?._id) {
+      await Booking.findByIdAndDelete(booking._id).catch(() => null);
+    }
+
+    if (slotIncremented) {
+      await slotService.decrementBooking(data.slotId).catch(() => null);
+    }
+
+    if (reservedStock.length > 0) {
+      await restoreMenuStockFromItems(
+        reservedStock.map((item) => ({
+          menuItem: item.menuItemId,
+          quantity: item.quantity,
+        })),
+      );
+    }
+
+    throw error;
+  }
 };
 
 /**
@@ -521,13 +697,23 @@ const cancelBooking = async (id, userId, reason) => {
   // Decrement slot booking count
   await slotService.decrementBooking(booking.slot);
 
+  // Return reserved stock back to menu items
+  await restoreMenuStockFromItems(booking.items);
+
   // Send cancellation notification
-  await notificationService.createNotification({
-    userId: booking.user,
-    title: "Booking Cancelled",
-    message: `Your booking (Token: ${booking.tokenNumber}) has been cancelled.`,
-    type: "alert",
-  });
+  try {
+    await notificationService.createNotification({
+      userId: booking.user,
+      title: "Booking Cancelled",
+      message: `Your booking (Token: ${booking.tokenNumber}) has been cancelled.`,
+      type: "alert",
+    });
+  } catch (notificationError) {
+    console.error(
+      "Failed to send cancellation notification:",
+      notificationError,
+    );
+  }
 
   return booking;
 };
@@ -682,19 +868,23 @@ const createWalkinBooking = async (data) => {
     throw ApiError.badRequest("Cannot book a past time slot");
   }
 
+  const rawItems = Array.isArray(data.items) ? data.items : [];
+  const requestedItems = aggregateRequestedItems(rawItems);
+  const menuItemsById =
+    requestedItems.length > 0
+      ? await getMenuItemsByRequest(requestedItems)
+      : new Map();
+
   // Fetch menu items and calculate prices
   const bookingItems = [];
   let totalAmount = 0;
 
-  for (const item of data.items) {
-    const menuItem = await MenuItem.findById(item.menuItemId);
+  for (const item of rawItems) {
+    const menuItemId = (item.menuItemId || item.menuItem || "").toString();
+    const menuItem = menuItemsById.get(menuItemId);
 
     if (!menuItem) {
-      throw ApiError.badRequest(`Menu item not found: ${item.menuItemId}`);
-    }
-
-    if (!menuItem.isAvailable) {
-      throw ApiError.badRequest(`${menuItem.itemName} is not available`);
+      throw ApiError.badRequest(`Menu item not found: ${menuItemId}`);
     }
 
     const quantity = item.quantity || 1;
@@ -713,23 +903,53 @@ const createWalkinBooking = async (data) => {
     totalAmount += itemTotal;
   }
 
-  // Create walk-in booking (no user association)
-  const booking = await Booking.create({
-    slot: data.slotId,
-    items: bookingItems,
-    totalAmount,
-    notes: data.notes,
-    isWalkin: true,
-    guestName: data.guestName || "Walk-in Guest",
-  });
+  let reservedStock = [];
+  let booking = null;
+  let slotIncremented = false;
 
-  // Increment slot booking count
-  await slotService.incrementBooking(data.slotId);
+  try {
+    if (requestedItems.length > 0) {
+      reservedStock = await reserveMenuStock(requestedItems, menuItemsById);
+    }
 
-  // Populate and return
-  await booking.populate([{ path: "slot" }, { path: "items.menuItem" }]);
+    // Create walk-in booking (no user association)
+    booking = await Booking.create({
+      slot: data.slotId,
+      items: bookingItems,
+      totalAmount,
+      notes: data.notes,
+      isWalkin: true,
+      guestName: data.guestName || "Walk-in Guest",
+    });
 
-  return booking;
+    // Increment slot booking count
+    await slotService.incrementBooking(data.slotId);
+    slotIncremented = true;
+
+    // Populate and return
+    await booking.populate([{ path: "slot" }, { path: "items.menuItem" }]);
+
+    return booking;
+  } catch (error) {
+    if (booking?._id) {
+      await Booking.findByIdAndDelete(booking._id).catch(() => null);
+    }
+
+    if (slotIncremented) {
+      await slotService.decrementBooking(data.slotId).catch(() => null);
+    }
+
+    if (reservedStock.length > 0) {
+      await restoreMenuStockFromItems(
+        reservedStock.map((item) => ({
+          menuItem: item.menuItemId,
+          quantity: item.quantity,
+        })),
+      );
+    }
+
+    throw error;
+  }
 };
 
 /**
@@ -987,6 +1207,96 @@ const rescheduleBooking = async (bookingId, newSlotId, userId) => {
 };
 
 /**
+ * Replace booking items by staff/counter while optionally enforcing same total
+ */
+const replaceBookingItems = async (bookingId, data) => {
+  const booking = await Booking.findById(bookingId).populate("items.menuItem");
+
+  if (!booking) {
+    throw ApiError.notFound("Booking not found");
+  }
+
+  if (booking.status !== "confirmed") {
+    throw ApiError.badRequest("Only confirmed bookings can be edited");
+  }
+
+  const rawItems = Array.isArray(data.items) ? data.items : [];
+  const requestedItems = aggregateRequestedItems(rawItems);
+  if (requestedItems.length === 0) {
+    throw ApiError.badRequest("At least one menu item is required");
+  }
+
+  const menuItemsById = await getMenuItemsByRequest(requestedItems);
+
+  const bookingItems = [];
+  let newTotalAmount = 0;
+
+  for (const item of rawItems) {
+    const menuItemId = (item.menuItemId || item.menuItem || "").toString();
+    const menuItem = menuItemsById.get(menuItemId);
+    if (!menuItem) {
+      throw ApiError.badRequest(`Menu item not found: ${menuItemId}`);
+    }
+
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    const portionSize = item.portionSize === "Small" ? "Small" : "Regular";
+    const portionMultiplier = portionSize === "Small" ? 0.8 : 1;
+    const price = Math.round(menuItem.price * portionMultiplier);
+
+    bookingItems.push({
+      menuItem: menuItem._id,
+      quantity,
+      price,
+      portionSize,
+    });
+
+    newTotalAmount += price * quantity;
+  }
+
+  const oldTotalAmount = Number(booking.totalAmount || 0);
+  const enforceSameTotal = data.enforceSameTotal !== false;
+  if (enforceSameTotal && newTotalAmount !== oldTotalAmount) {
+    throw ApiError.badRequest(
+      `Replacement must keep total at ₹${oldTotalAmount}. Current selection totals ₹${newTotalAmount}.`,
+    );
+  }
+
+  let reservedStock = [];
+
+  try {
+    reservedStock = await reserveMenuStock(requestedItems, menuItemsById);
+
+    const oldItems = booking.items || [];
+
+    booking.items = bookingItems;
+    booking.totalAmount = newTotalAmount;
+    booking.allocationReason = "Updated by staff at counter";
+    await booking.save();
+
+    await restoreMenuStockFromItems(oldItems);
+
+    await booking.populate([
+      { path: "user", select: "fullName email" },
+      { path: "slot" },
+      { path: "items.menuItem" },
+    ]);
+
+    return booking;
+  } catch (error) {
+    if (reservedStock.length > 0) {
+      await restoreMenuStockFromItems(
+        reservedStock.map((item) => ({
+          menuItem: item.menuItemId,
+          quantity: item.quantity,
+        })),
+      );
+    }
+
+    throw error;
+  }
+};
+
+/**
  * Get token invalidation details with user-friendly reason
  */
 const getTokenStatus = async (tokenNumber) => {
@@ -1077,5 +1387,6 @@ module.exports = {
   getScanHistory,
   getQueueInfo,
   rescheduleBooking,
+  replaceBookingItems,
   getTokenStatus,
 };

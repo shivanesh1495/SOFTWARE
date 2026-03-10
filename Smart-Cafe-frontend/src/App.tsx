@@ -47,6 +47,9 @@ const CanteenStaffWalkin = React.lazy(() => import("./staff/walkin/page"));
 const CanteenStaffAnnouncements = React.lazy(
   () => import("./staff/announcements/page"),
 );
+const CanteenStaffMenuQuantity = React.lazy(
+  () => import("./staff/menu-quantity/page"),
+);
 
 const ManagerDashboard = React.lazy(() => import("./manager/dashboard/page"));
 const ManagerForecasts = React.lazy(() => import("./manager/forecasts/page"));
@@ -139,6 +142,10 @@ function App() {
                     <Route
                       path="/canteen-staff/announcements"
                       element={<CanteenStaffAnnouncements />}
+                    />
+                    <Route
+                      path="/canteen-staff/menu-quantity"
+                      element={<CanteenStaffMenuQuantity />}
                     />
                   </Route>
 

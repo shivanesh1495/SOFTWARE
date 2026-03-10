@@ -41,8 +41,30 @@ const getBookings = Joi.object({
   }),
 });
 
+const replaceBookingItems = Joi.object({
+  params: Joi.object({
+    id: objectId.required(),
+  }),
+  body: Joi.object({
+    items: Joi.array()
+      .items(
+        Joi.object({
+          menuItemId: objectId.required(),
+          quantity: Joi.number().integer().min(1).default(1),
+          portionSize: Joi.string()
+            .valid("Regular", "Small")
+            .default("Regular"),
+        }),
+      )
+      .min(1)
+      .required(),
+    enforceSameTotal: Joi.boolean().default(true),
+  }),
+});
+
 module.exports = {
   createBooking,
   cancelBooking,
   getBookings,
+  replaceBookingItems,
 };

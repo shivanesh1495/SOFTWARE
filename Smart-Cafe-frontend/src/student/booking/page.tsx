@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import Button from "../../components/common/Button";
 import Modal from "../../components/common/Modal";
@@ -12,7 +12,6 @@ import {
   Minus,
   Sparkles,
   Loader2,
-  Apple,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 import { getMenuItems, type MenuItem } from "../../services/menu.service";
@@ -31,6 +30,7 @@ import { getPublicSettings } from "../../services/system.service";
 import { useCart } from "../../store/cart.store";
 import toast from "react-hot-toast";
 import { getOperatingStatus } from "../../utils/serviceSchedule";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 
 // Frontend Interface
 interface FrontendMenuItem {
@@ -45,6 +45,7 @@ interface FrontendMenuItem {
   imageColor: string;
   isVeg: boolean;
   isAvailable: boolean;
+  availableQuantity: number;
 }
 
 const COLORS = [
@@ -122,9 +123,44 @@ const StudentBooking: React.FC = () => {
     }
   }, [queryCanteenId]);
 
+  const fetchFood = useCallback(async () => {
+    setLoadingFood(true);
+    try {
+      const backendItems: MenuItem[] = await getMenuItems(
+        activeCanteenId ? { canteen: activeCanteenId } : undefined,
+      );
+      const mapped: FrontendMenuItem[] = backendItems.map((item) => {
+        const availableQuantity = Number(item.availableQuantity ?? 100);
+        return {
+          id: item.id || item._id || "",
+          name: item.itemName,
+          price: item.price || 0,
+          category: mapCategory(item.category),
+          type: mapDietaryType(item.dietaryType),
+          isJain: item.dietaryType === "Jain",
+          isVeg: item.dietaryType !== "Non-Veg" && item.dietaryType !== "Egg",
+          isAvailable: item.isAvailable !== false && availableQuantity > 0,
+          availableQuantity,
+          allergens: item.allergens || [],
+          ecoScore: mapEcoScore(item.ecoScore),
+          imageColor: getColor(item.itemName),
+        };
+      });
+      setMenuItems(mapped);
+    } catch (err) {
+      console.error("Failed to fetch menu:", err);
+    } finally {
+      setLoadingFood(false);
+    }
+  }, [activeCanteenId]);
+
   useEffect(() => {
     fetchFood();
-  }, [activeCanteenId]);
+  }, [fetchFood]);
+
+  useRealtimeRefresh(["menu:updated", "booking:updated"], () => {
+    fetchFood();
+  });
 
   useEffect(() => {
     loadCanteens();
@@ -181,33 +217,6 @@ const StudentBooking: React.FC = () => {
     }
   };
 
-  const fetchFood = async () => {
-    setLoadingFood(true);
-    try {
-      const backendItems: MenuItem[] = await getMenuItems(
-        activeCanteenId ? { canteen: activeCanteenId } : undefined,
-      );
-      const mapped: FrontendMenuItem[] = backendItems.map((item) => ({
-        id: item.id || item._id || "",
-        name: item.itemName,
-        price: item.price || 0,
-        category: mapCategory(item.category),
-        type: mapDietaryType(item.dietaryType),
-        isJain: item.dietaryType === "Jain",
-        isVeg: item.dietaryType !== "Non-Veg" && item.dietaryType !== "Egg",
-        isAvailable: item.isAvailable !== false,
-        allergens: item.allergens || [],
-        ecoScore: mapEcoScore(item.ecoScore),
-        imageColor: getColor(item.itemName),
-      }));
-      setMenuItems(mapped);
-    } catch (err) {
-      console.error("Failed to fetch menu:", err);
-    } finally {
-      setLoadingFood(false);
-    }
-  };
-
   const mapCategory = (cat: string): "Breakfast" | "Lunch" | "Snacks" => {
     const u = cat?.toUpperCase() || "";
     if (u === "BREAKFAST") return "Breakfast";
@@ -240,6 +249,11 @@ const StudentBooking: React.FC = () => {
   };
 
   const handleAdd = (item: FrontendMenuItem) => {
+    if (!item.isAvailable || item.availableQuantity <= 0) {
+      toast.error(`${item.name} is out of stock`);
+      return;
+    }
+
     addItem({
       id: item.id,
       name: item.name,
@@ -252,6 +266,10 @@ const StudentBooking: React.FC = () => {
 
   const handleIncrement = (item: FrontendMenuItem) => {
     const current = getCartQty(item.id);
+    if (current >= item.availableQuantity) {
+      toast.error(`Only ${item.availableQuantity} available for ${item.name}`);
+      return;
+    }
     updateQuantity(item.id, current + 1);
   };
 
@@ -289,7 +307,9 @@ const StudentBooking: React.FC = () => {
     );
   });
 
-  const availableItems = menuItems.filter((item) => item.isAvailable);
+  const availableItems = menuItems.filter(
+    (item) => item.isAvailable && item.availableQuantity > 0,
+  );
 
   const toggleNutritionItem = (itemId: string) => {
     setSelectedNutritionItemIds((prev) =>
@@ -542,6 +562,9 @@ const StudentBooking: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredItems.map((item) => {
               const qty = getCartQty(item.id);
+              const isOutOfStock =
+                !item.isAvailable || item.availableQuantity <= 0;
+              const atMaxInCart = qty >= item.availableQuantity;
               return (
                 <div
                   key={item.id}
@@ -584,6 +607,18 @@ const StudentBooking: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                            isOutOfStock
+                              ? "bg-red-50 text-red-700"
+                              : "bg-blue-50 text-blue-700",
+                          )}
+                        >
+                          {isOutOfStock
+                            ? "Sold Out"
+                            : `${item.availableQuantity} left`}
+                        </span>
                         {item.ecoScore > 80 && (
                           <span className="text-[10px] font-bold bg-green-50 text-green-700 px-1.5 py-0.5 rounded flex items-center gap-1">
                             <Leaf size={8} /> Eco
@@ -610,8 +645,9 @@ const StudentBooking: React.FC = () => {
                           size="sm"
                           className="h-8 px-3 text-xs"
                           onClick={() => handleAdd(item)}
+                          disabled={isOutOfStock || !!serviceNotice}
                         >
-                          Add
+                          {isOutOfStock ? "Sold Out" : "Add"}
                         </Button>
                       ) : (
                         <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-1">
@@ -626,7 +662,8 @@ const StudentBooking: React.FC = () => {
                           </span>
                           <button
                             onClick={() => handleIncrement(item)}
-                            className="p-1 text-blue-700 hover:bg-blue-100 rounded"
+                            disabled={atMaxInCart || !!serviceNotice}
+                            className="p-1 text-blue-700 hover:bg-blue-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Plus size={14} />
                           </button>

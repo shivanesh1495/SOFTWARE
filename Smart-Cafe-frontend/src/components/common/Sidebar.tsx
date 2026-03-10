@@ -15,6 +15,7 @@ import {
   Settings,
   Database,
   Store,
+  Package,
 } from "lucide-react";
 import { cn } from "../../utils/cn";
 
@@ -62,6 +63,11 @@ const Sidebar: React.FC = () => {
             to: "/canteen-staff/announcements",
             label: "Announcements",
             icon: Megaphone,
+          },
+          {
+            to: "/canteen-staff/menu-quantity",
+            label: "Food Quantity",
+            icon: Package,
           },
         ];
       case "manager":

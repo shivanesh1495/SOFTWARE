@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Button from "../../components/common/Button";
 import {
@@ -15,6 +15,7 @@ import { cn } from "../../utils/cn";
 import { getMenuItems, type MenuItem } from "../../services/menu.service";
 import { useCart } from "../../store/cart.store";
 import toast from "react-hot-toast";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 
 const COLORS = [
   "bg-orange-100",
@@ -48,11 +49,7 @@ const StudentItemDetail: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
-  useEffect(() => {
-    fetchItem();
-  }, [id]);
-
-  const fetchItem = async () => {
+  const fetchItem = useCallback(async () => {
     setLoading(true);
     try {
       const items = await getMenuItems();
@@ -63,7 +60,15 @@ const StudentItemDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchItem();
+  }, [fetchItem]);
+
+  useRealtimeRefresh(["menu:updated", "booking:updated"], () => {
+    fetchItem();
+  });
 
   if (loading) {
     return (
@@ -90,8 +95,21 @@ const StudentItemDetail: React.FC = () => {
   const imageColor = getColor(item.itemName);
   const allergens = item.allergens || [];
   const cartQty = cartItems.find((c) => c.id === itemId)?.quantity || 0;
+  const availableQuantity = Number(item.availableQuantity ?? 100);
+  const remainingForSelection = Math.max(0, availableQuantity - cartQty);
+  const isOutOfStock = !item.isAvailable || availableQuantity <= 0;
 
   const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error(`${item.itemName} is out of stock`);
+      return;
+    }
+
+    if (quantity > remainingForSelection) {
+      toast.error(`Only ${remainingForSelection} more available for this item`);
+      return;
+    }
+
     setIsAdding(true);
     addItem({
       id: itemId,
@@ -155,6 +173,16 @@ const StudentItemDetail: React.FC = () => {
               </>
             )}
             <div className="font-medium text-gray-900">₹{price}</div>
+            <div
+              className={cn(
+                "text-xs font-semibold px-2 py-0.5 rounded-full",
+                isOutOfStock
+                  ? "bg-red-50 text-red-700"
+                  : "bg-blue-50 text-blue-700",
+              )}
+            >
+              {isOutOfStock ? "Sold Out" : `${availableQuantity} left`}
+            </div>
           </div>
         </div>
 
@@ -241,7 +269,8 @@ const StudentItemDetail: React.FC = () => {
             </span>
             <button
               onClick={() => setQuantity(quantity + 1)}
-              className="p-2 bg-white rounded-md shadow-sm text-gray-600 hover:text-gray-900"
+              disabled={isOutOfStock || quantity >= remainingForSelection}
+              className="p-2 bg-white rounded-md shadow-sm text-gray-600 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus size={16} />
             </button>
@@ -252,8 +281,9 @@ const StudentItemDetail: React.FC = () => {
             className="flex-1 flex justify-between items-center"
             onClick={handleAddToCart}
             isLoading={isAdding}
+            disabled={isOutOfStock || remainingForSelection <= 0}
           >
-            <span>Add to Cart</span>
+            <span>{isOutOfStock ? "Sold Out" : "Add to Cart"}</span>
             <span className="bg-white/20 px-2 py-0.5 rounded text-sm">
               ₹{totalPrice}
             </span>

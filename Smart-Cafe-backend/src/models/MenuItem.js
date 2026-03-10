@@ -33,6 +33,11 @@ const menuItemSchema = new mongoose.Schema(
       required: [true, "Price is required"],
       min: [0, "Price cannot be negative"],
     },
+    availableQuantity: {
+      type: Number,
+      default: 100,
+      min: [0, "Available quantity cannot be negative"],
+    },
     isVeg: {
       type: Boolean,
       default: true,
@@ -115,6 +120,7 @@ const menuItemSchema = new mongoose.Schema(
 menuItemSchema.index({ itemName: "text", description: "text" });
 menuItemSchema.index({ category: 1 });
 menuItemSchema.index({ isAvailable: 1 });
+menuItemSchema.index({ availableQuantity: 1 });
 menuItemSchema.index({ menu: 1 });
 menuItemSchema.index({ canteens: 1 });
 

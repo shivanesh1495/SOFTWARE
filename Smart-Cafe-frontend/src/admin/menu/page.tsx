@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -16,6 +16,7 @@ import * as menuService from "../../services/menu.service";
 import * as canteenService from "../../services/canteen.service";
 import type { Canteen } from "../../services/canteen.service";
 import type { MenuItem as BackendMenuItem } from "../../services/menu.service";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 
 // Extended MenuItem type for admin display
 interface MenuItem extends BackendMenuItem {
@@ -38,6 +39,7 @@ const AdminMenu: React.FC = () => {
   const [formData, setFormData] = useState<{
     itemName: string;
     price: number;
+    availableQuantity: number;
     category: string;
     dietaryType: string;
     isVeg: boolean;
@@ -47,6 +49,7 @@ const AdminMenu: React.FC = () => {
   }>({
     itemName: "",
     price: 0,
+    availableQuantity: 100,
     category: "LUNCH",
     dietaryType: "Veg",
     isVeg: true,
@@ -61,16 +64,7 @@ const AdminMenu: React.FC = () => {
   const [dietaryFilter, setDietaryFilter] = useState("All");
   const [canteenFilter, setCanteenFilter] = useState("All");
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const getErrorMessage = (error: any) =>
-    error?.response?.data?.message ||
-    error?.message ||
-    "Something went wrong. Please try again.";
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [menuData, canteenData] = await Promise.all([
@@ -84,7 +78,20 @@ const AdminMenu: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useRealtimeRefresh(["menu:updated", "booking:updated"], () => {
+    loadData();
+  });
+
+  const getErrorMessage = (error: any) =>
+    error?.response?.data?.message ||
+    error?.message ||
+    "Something went wrong. Please try again.";
 
   // Helper to extract canteen IDs from an item's canteens array
   const getItemCanteenIds = (item: MenuItem): string[] => {
@@ -148,6 +155,7 @@ const AdminMenu: React.FC = () => {
     setFormData({
       itemName: item.itemName || item.name || "",
       price: item.price || 0,
+      availableQuantity: item.availableQuantity ?? 100,
       category: validCategory,
       dietaryType: item.dietaryType || (item.isVeg ? "Veg" : "Non-Veg"),
       isVeg: item.isVeg !== undefined ? item.isVeg : true,
@@ -206,6 +214,7 @@ const AdminMenu: React.FC = () => {
       const payload: any = {
         itemName: formData.itemName,
         price: formData.price,
+        availableQuantity: formData.availableQuantity,
         category: formData.category,
         dietaryType: dietaryType,
         isVeg: isVeg,
@@ -246,6 +255,7 @@ const AdminMenu: React.FC = () => {
     setFormData({
       itemName: "",
       price: 0,
+      availableQuantity: 100,
       category: "LUNCH",
       dietaryType: "Veg",
       isVeg: true,
@@ -345,6 +355,7 @@ const AdminMenu: React.FC = () => {
               <th className="px-6 py-3 font-medium">Item Name</th>
               <th className="px-6 py-3 font-medium">Category</th>
               <th className="px-6 py-3 font-medium">Dietary</th>
+              <th className="px-6 py-3 font-medium">Quantity</th>
               <th className="px-6 py-3 font-medium">Canteens</th>
               <th className="px-6 py-3 font-medium">Status</th>
               <th className="px-6 py-3 font-medium text-right">Actions</th>
@@ -354,6 +365,7 @@ const AdminMenu: React.FC = () => {
             {filteredItems.length > 0 ? (
               filteredItems.map((item) => {
                 const names = getCanteenNames(item);
+                const stockQty = item.availableQuantity ?? 100;
                 return (
                   <tr key={item.id || item._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium text-gray-900">
@@ -376,6 +388,20 @@ const AdminMenu: React.FC = () => {
                           ? "Non-Veg"
                           : item.dietaryType ||
                             (item.isVeg ? "Veg" : "Non-Veg")}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={cn(
+                          "px-2 py-1 rounded text-xs font-semibold border",
+                          stockQty > 10
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : stockQty > 0
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-red-50 text-red-700 border-red-200",
+                        )}
+                      >
+                        {stockQty} left
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -404,7 +430,7 @@ const AdminMenu: React.FC = () => {
                         }
                         className="focus:outline-none"
                       >
-                        {item.isAvailable ? (
+                        {item.isAvailable && stockQty > 0 ? (
                           <span className="flex items-center text-green-600 text-xs font-medium bg-green-50 px-2 py-1 rounded-full">
                             <CheckCircle size={12} className="mr-1" /> Available
                           </span>
@@ -438,7 +464,7 @@ const AdminMenu: React.FC = () => {
               })
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   No menu items found. Add one to get started.
                 </td>
               </tr>
@@ -493,6 +519,25 @@ const AdminMenu: React.FC = () => {
                     }
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Available Quantity
+                </label>
+                <input
+                  required
+                  min={0}
+                  type="number"
+                  className="w-full px-3 py-2 border rounded-lg"
+                  value={formData.availableQuantity}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      availableQuantity: Math.max(0, Number(e.target.value)),
+                    })
+                  }
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -400,3 +400,17 @@ export const rescheduleBooking = async (
   });
   return normalizeBooking(response.data.data);
 };
+
+/**
+ * Replace booking items (Staff)
+ */
+export const replaceBookingItems = async (
+  bookingId: string,
+  data: {
+    items: { menuItemId: string; quantity: number; portionSize?: string }[];
+    enforceSameTotal?: boolean;
+  },
+): Promise<Booking> => {
+  const response = await api.patch(`/bookings/${bookingId}/items`, data);
+  return normalizeBooking(response.data.data);
+};

@@ -6,6 +6,12 @@ const {
 } = require("../utils/helpers");
 const ApiError = require("../utils/ApiError");
 
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.toLowerCase() === "true";
+  return Boolean(value);
+};
+
 // ==================== MENU OPERATIONS ====================
 
 /**
@@ -136,7 +142,12 @@ const getAllMenuItems = async (query = {}) => {
   }
 
   if (query.isAvailable !== undefined) {
-    filter.isAvailable = query.isAvailable;
+    filter.isAvailable = toBoolean(query.isAvailable);
+  }
+
+  if (query.onlyOrderable !== undefined && toBoolean(query.onlyOrderable)) {
+    filter.isAvailable = true;
+    filter.availableQuantity = { $gt: 0 };
   }
 
   if (query.canteen) {
@@ -180,7 +191,19 @@ const getMenuItemById = async (id) => {
  * Create menu item
  */
 const createMenuItem = async (data) => {
-  const item = await MenuItem.create(data);
+  const payload = {
+    ...data,
+    availableQuantity:
+      data.availableQuantity === undefined
+        ? 100
+        : Number(data.availableQuantity) || 0,
+  };
+
+  if (payload.availableQuantity <= 0 && payload.isAvailable === undefined) {
+    payload.isAvailable = false;
+  }
+
+  const item = await MenuItem.create(payload);
 
   // If menuId is provided, add item to menu
   if (data.menuId) {
@@ -216,6 +239,24 @@ const updateMenuItem = async (id, data) => {
 
     await Menu.findByIdAndUpdate(menuId, { $addToSet: { items: id } });
     item.menu = menuId;
+  }
+
+  if (updateData.availableQuantity !== undefined) {
+    const parsedQuantity = Number(updateData.availableQuantity);
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+      throw ApiError.badRequest("Available quantity must be 0 or more");
+    }
+
+    updateData.availableQuantity = Math.floor(parsedQuantity);
+
+    if (updateData.availableQuantity <= 0) {
+      updateData.isAvailable = false;
+    } else if (
+      updateData.isAvailable === undefined &&
+      item.isAvailable === false
+    ) {
+      updateData.isAvailable = true;
+    }
   }
 
   Object.assign(item, updateData);
@@ -262,6 +303,34 @@ const toggleItemAvailability = async (id) => {
   return item;
 };
 
+/**
+ * Update only menu item quantity (Management/Staff)
+ */
+const updateMenuItemQuantity = async (id, availableQuantity) => {
+  const item = await MenuItem.findById(id);
+
+  if (!item) {
+    throw ApiError.notFound("Menu item not found");
+  }
+
+  const parsedQuantity = Number(availableQuantity);
+  if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
+    throw ApiError.badRequest("Available quantity must be 0 or more");
+  }
+
+  item.availableQuantity = Math.floor(parsedQuantity);
+  if (item.availableQuantity <= 0) {
+    item.isAvailable = false;
+  } else if (!item.isAvailable) {
+    item.isAvailable = true;
+  }
+
+  await item.save();
+  await item.populate("canteens", "name");
+
+  return item;
+};
+
 module.exports = {
   // Menu
   getMenus,
@@ -275,6 +344,7 @@ module.exports = {
   getMenuItemById,
   createMenuItem,
   updateMenuItem,
+  updateMenuItemQuantity,
   deleteMenuItem,
   toggleItemAvailability,
 };

@@ -103,6 +103,20 @@ const updateMenuItem = catchAsync(async (req, res) => {
 });
 
 /**
+ * Update menu item quantity
+ * PATCH /api/menu-items/:id/quantity
+ */
+const updateMenuItemQuantity = catchAsync(async (req, res) => {
+  const item = await menuService.updateMenuItemQuantity(
+    req.params.id,
+    req.body.availableQuantity,
+  );
+
+  emitToAll("menu:updated", { action: "item_quantity_updated", item });
+  ApiResponse.ok(res, "Menu item quantity updated", item);
+});
+
+/**
  * Delete menu item
  * DELETE /api/menu-items/:id
  */
@@ -141,6 +155,7 @@ module.exports = {
   getMenuItemById,
   createMenuItem,
   updateMenuItem,
+  updateMenuItemQuantity,
   deleteMenuItem,
   toggleItemAvailability,
 };
