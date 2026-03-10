@@ -2,6 +2,32 @@ const mongoose = require("mongoose");
 
 const SLOT_STATUS = ["Open", "Full", "Cancelled", "FastFilling"];
 
+const to12Hour = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const ampmMatch = text.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (ampmMatch) {
+    const hours = Number(ampmMatch[1]);
+    const minutes = ampmMatch[2];
+    const period = ampmMatch[3].toUpperCase();
+    if (hours >= 1 && hours <= 12) {
+      return `${String(hours).padStart(2, "0")}:${minutes} ${period}`;
+    }
+    return text;
+  }
+
+  const hhmmMatch = text.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!hhmmMatch) return text;
+
+  const hours24 = Number(hhmmMatch[1]);
+  const minutes = hhmmMatch[2];
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+
+  return `${String(hours12).padStart(2, "0")}:${minutes} ${period}`;
+};
+
 const slotSchema = new mongoose.Schema(
   {
     date: {
@@ -56,6 +82,16 @@ const slotSchema = new mongoose.Schema(
     toJSON: {
       virtuals: true,
       transform: function (doc, ret) {
+        if (ret.time) {
+          const parts = String(ret.time)
+            .split("-")
+            .map((part) => part.trim())
+            .filter(Boolean);
+          const start = to12Hour(parts[0] || ret.time);
+          const end = to12Hour(parts[1] || "");
+          ret.time = end ? `${start} - ${end}` : start;
+        }
+
         ret.id = ret._id.toString();
         delete ret._id;
         delete ret.__v;
@@ -81,7 +117,7 @@ slotSchema.virtual("startTime").get(function () {
     .split("-")
     .map((part) => part.trim())
     .filter(Boolean);
-  return parts[0] || this.time;
+  return to12Hour(parts[0] || this.time);
 });
 
 slotSchema.virtual("endTime").get(function () {
@@ -90,7 +126,7 @@ slotSchema.virtual("endTime").get(function () {
     .split("-")
     .map((part) => part.trim())
     .filter(Boolean);
-  return parts[1] || "";
+  return to12Hour(parts[1] || "");
 });
 
 // Update status based on capacity

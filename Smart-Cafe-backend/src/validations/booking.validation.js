@@ -37,7 +37,7 @@ const getBookings = Joi.object({
     date: Joi.date(),
     slotId: objectId,
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(500).default(10),
   }),
 });
 

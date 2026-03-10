@@ -119,6 +119,11 @@ const bulkUpdateSettings = catchAsync(async (req, res) => {
     req.userId,
   );
 
+  emitToAll("settings:updated", {
+    bulk: true,
+    settings: results,
+  });
+
   ApiResponse.ok(res, "Settings updated", results);
 });
 

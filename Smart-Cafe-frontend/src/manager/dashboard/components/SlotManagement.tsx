@@ -32,7 +32,10 @@ const SlotManagement: React.FC<Props> = ({ canteenId }) => {
 
   const loadSlots = useCallback(async () => {
     try {
-      const params: { date: string; canteenId?: string } = { date: dateStr };
+      const params: { date: string; canteenId?: string; limit?: number } = {
+        date: dateStr,
+        limit: 200,
+      };
       if (canteenId) params.canteenId = canteenId;
       const data = await getSlots(params);
       const list = Array.isArray(data) ? data : (data as any).slots || [];

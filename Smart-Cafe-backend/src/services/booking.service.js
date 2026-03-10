@@ -244,10 +244,10 @@ const reserveMenuStock = async (requestedItems, menuItemsById) => {
 
   // Initialize missing availableQuantity in database for backward compatibility
   // Mongoose schema defaults hide missing DB fields, so we fix them at DB level first.
-  const ids = requestedItems.map(item => item.menuItemId);
+  const ids = requestedItems.map((item) => item.menuItemId);
   await MenuItem.updateMany(
     { _id: { $in: ids }, availableQuantity: { $exists: false } },
-    { $set: { availableQuantity: 100 } }
+    { $set: { availableQuantity: 100 } },
   );
 
   try {
@@ -571,10 +571,17 @@ const createBooking = async (userId, data) => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - noShowPenaltyDays);
 
+    // Enforce penalty based on missed slot date/time instead of cancelledAt.
+    // Auto-release can mark old missed bookings later and update cancelledAt,
+    // which would otherwise incorrectly block users.
+    const recentSlotIds = await Slot.find({
+      date: { $gte: cutoff },
+    }).select("_id");
+
     const recentNoShow = await Booking.findOne({
       user: userId,
       status: "no_show",
-      cancelledAt: { $gte: cutoff },
+      slot: { $in: recentSlotIds.map((s) => s._id) },
     }).select("_id");
 
     if (recentNoShow) {
@@ -1381,6 +1388,141 @@ const getTokenStatus = async (tokenNumber) => {
   };
 };
 
+/**
+ * Generate secure QR token for a booking
+ */
+const generateBookingQRToken = async (bookingId, userId) => {
+  const booking = await Booking.findById(bookingId)
+    .populate("user", "name email")
+    .populate("slot", "time date")
+    .populate("items.menuItem", "itemName name price");
+
+  if (!booking) {
+    throw ApiError.notFound("Booking not found");
+  }
+
+  // Verify ownership (user can only generate QR for their own bookings)
+  if (booking.user && booking.user._id.toString() !== userId.toString()) {
+    throw ApiError.forbidden(
+      "You can only generate QR tokens for your own bookings",
+    );
+  }
+
+  // Don't allow QR generation for cancelled/completed bookings
+  if (booking.status === "cancelled" || booking.status === "no_show") {
+    throw ApiError.badRequest(
+      "Cannot generate QR token for cancelled or no-show bookings",
+    );
+  }
+
+  // Calculate expiry time for token
+  const tokenExpiryMins = await getPolicyNumber(POLICY_KEYS.tokenExpiry, null);
+  let expiryAt = null;
+  if (tokenExpiryMins && booking.slot) {
+    const slotEndTime = await getSlotEndTime(booking.slot);
+    if (slotEndTime) {
+      expiryAt = new Date(slotEndTime.getTime() + tokenExpiryMins * 60000);
+    }
+  }
+
+  // Get canteen name
+  const canteenName = booking.slot?.canteen?.name || "Smart Cafe";
+
+  // Convert slot to object with virtuals to access startTime and endTime
+  const slotData = booking.slot
+    ? booking.slot.toObject({ virtuals: true })
+    : null;
+
+  // Prepare booking data for QR token
+  const qrTokenUtil = require("../utils/qrToken");
+  const qrToken = qrTokenUtil.generateQRToken({
+    bookingId: booking._id.toString(),
+    tokenNumber: booking.tokenNumber,
+    userId: booking.user?._id?.toString() || null,
+    userName: booking.user?.name || booking.guestName || "Guest",
+    userEmail: booking.user?.email || null,
+    slotTime:
+      slotData?.time ||
+      `${slotData?.startTime || ""} - ${slotData?.endTime || ""}`,
+    slotDate: slotData?.date?.toISOString() || new Date().toISOString(),
+    slotStartTime: slotData?.startTime || null,
+    slotEndTime: slotData?.endTime || null,
+    totalAmount: booking.totalAmount,
+    items: booking.items.map((item) => ({
+      name: item.menuItem?.itemName || item.menuItem?.name || "Item",
+      quantity: item.quantity,
+      price: item.price,
+      portionSize: item.portionSize || "Regular",
+    })),
+    status: booking.status,
+    expiryAt: expiryAt?.toISOString() || null,
+    canteenName,
+    createdAt: booking.createdAt.toISOString(),
+  });
+
+  return qrToken;
+};
+
+/**
+ * Verify and decode QR token
+ */
+const verifyBookingQRToken = async (qrToken) => {
+  const qrTokenUtil = require("../utils/qrToken");
+
+  // Verify JWT signature
+  let decoded;
+  try {
+    decoded = qrTokenUtil.verifyQRToken(qrToken);
+  } catch (error) {
+    throw ApiError.badRequest(error.message);
+  }
+
+  // Validate token data
+  const validation = qrTokenUtil.validateQRToken(decoded);
+
+  // Fetch current booking status from database
+  let currentBooking = null;
+  if (decoded.bookingId) {
+    try {
+      currentBooking = await Booking.findById(decoded.bookingId)
+        .populate("user", "name email")
+        .populate("slot", "time date startTime endTime");
+    } catch (error) {
+      // Booking not found - validation will catch this
+    }
+  }
+
+  // If booking exists, check current status
+  if (currentBooking) {
+    // Update validation based on current booking status
+    if (currentBooking.status === "completed") {
+      validation.errors.push("This booking has already been completed");
+      validation.isValid = false;
+    } else if (currentBooking.status === "cancelled") {
+      validation.errors.push("This booking has been cancelled");
+      validation.isValid = false;
+    } else if (currentBooking.status === "no_show") {
+      validation.errors.push("This booking was marked as no-show");
+      validation.isValid = false;
+    }
+  }
+
+  return {
+    decoded,
+    validation,
+    currentBooking: currentBooking
+      ? {
+          id: currentBooking._id,
+          tokenNumber: currentBooking.tokenNumber,
+          status: currentBooking.status,
+          totalAmount: currentBooking.totalAmount,
+          user: currentBooking.user,
+          slot: currentBooking.slot,
+        }
+      : null,
+  };
+};
+
 module.exports = {
   getUserBookings,
   getAllBookings,
@@ -1398,4 +1540,6 @@ module.exports = {
   rescheduleBooking,
   replaceBookingItems,
   getTokenStatus,
+  generateBookingQRToken,
+  verifyBookingQRToken,
 };

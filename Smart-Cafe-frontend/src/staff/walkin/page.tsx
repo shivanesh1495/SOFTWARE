@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Button from "../../components/common/Button";
 import { UserPlus, Check, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "../../utils/cn";
@@ -8,6 +8,7 @@ import type { Canteen } from "../../services/canteen.service";
 import { getPublicSettings } from "../../services/system.service";
 import toast from "react-hot-toast";
 import { getOperatingStatus } from "../../utils/serviceSchedule";
+import { useRealtimeRefresh } from "../../hooks/useRealtimeRefresh";
 
 const StaffWalkin: React.FC = () => {
   const [personCount, setPersonCount] = useState(1);
@@ -15,8 +16,6 @@ const StaffWalkin: React.FC = () => {
   const [tokenGenerated, setTokenGenerated] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
-
-  
   // Slots & Selection
   const [slots, setSlots] = useState<any[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
@@ -26,11 +25,19 @@ const StaffWalkin: React.FC = () => {
   const [selectedCanteenId, setSelectedCanteenId] = useState("");
   const [loading, setLoading] = useState(true);
   const [serviceBlockReason, setServiceBlockReason] = useState("");
+  const [onlineBookingEnabled, setOnlineBookingEnabled] = useState(true);
+  const [walkinEnabled, setWalkinEnabled] = useState(true);
 
   useEffect(() => {
     loadCanteens();
     loadPublicSettings();
   }, []);
+
+  const handleSettingsRealtime = useCallback(() => {
+    loadPublicSettings();
+  }, []);
+
+  useRealtimeRefresh(["settings:updated"], handleSettingsRealtime);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -59,16 +66,20 @@ const StaffWalkin: React.FC = () => {
 
   const loadSlots = async () => {
     try {
-      const data = await bookingService.getTodaySlotsByCanteen(selectedCanteenId);
+      const data =
+        await bookingService.getTodaySlotsByCanteen(selectedCanteenId);
       setSlots(data);
     } catch (error) {
-       console.error("Failed to load slots", error);
+      console.error("Failed to load slots", error);
     }
   };
 
-  const loadPublicSettings = async () => {
+  async function loadPublicSettings() {
     try {
       const settings = await getPublicSettings();
+      setOnlineBookingEnabled(settings.onlineBookingEnabled);
+      setWalkinEnabled(settings.walkinEnabled);
+
       if (!settings.masterBookingEnabled) {
         setServiceBlockReason("System under maintenance.");
         return;
@@ -85,7 +96,7 @@ const StaffWalkin: React.FC = () => {
       console.error("Failed to load public settings:", error);
       setServiceBlockReason("");
     }
-  };
+  }
 
   const loadCanteens = async () => {
     try {
@@ -148,6 +159,10 @@ const StaffWalkin: React.FC = () => {
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           For faculty, guests, or students without pre-booking.
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          Online Booking: {onlineBookingEnabled ? "Active" : "Disabled"} |
+          Walk-in Mode: {walkinEnabled ? "Active" : "Disabled"}
         </p>
       </header>
 
@@ -218,58 +233,89 @@ const StaffWalkin: React.FC = () => {
         </div>
       </div>
 
-     {/* Slot Selection */}
+      {/* Slot Selection */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-         <h3 className="text-sm font-medium text-gray-700 mb-3">Select Slot</h3>
-         {slots.length === 0 ? (
-             <p className="text-sm text-gray-400">No slots available for today.</p>
-         ) : (
-             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                 {slots.map(slot => {
-                     // Parse slot time
-                     const now = new Date();
-                     const [hours, minutes] = slot.time.split(':').map(Number); // Assuming "HH:mm" format
-                     const slotTime = new Date();
-                     slotTime.setHours(hours, minutes, 0, 0);
-                     
-                     // Allow 15 min buffer? No, simple expiry for now as per request
-                     const isExpired = now > slotTime;
-                     const isSlotFull = slot.booked >= slot.capacity;
-                     const isDisabled = isSlotFull || isExpired;
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Select Slot</h3>
+        {slots.length === 0 ? (
+          <p className="text-sm text-gray-400">No slots available for today.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {slots.map((slot) => {
+              // Parse slot time from either startTime or range text
+              const now = new Date();
+              const startText = String(slot.startTime || slot.time || "")
+                .split("-")[0]
+                .trim();
+              const match = startText.match(/^(\d{1,2}):(\d{2})(\s*[AP]M)?$/i);
+              let hours = 0;
+              let minutes = 0;
+              if (match) {
+                hours = Number(match[1]);
+                minutes = Number(match[2]);
+                const period = match[3]?.trim().toUpperCase();
+                if (period === "PM" && hours !== 12) hours += 12;
+                if (period === "AM" && hours === 12) hours = 0;
+              }
+              const slotTime = new Date();
+              slotTime.setHours(hours, minutes, 0, 0);
 
-                     return (
-                        <button
-                            key={slot.id}
-                            disabled={isDisabled}
-                            onClick={() => setSelectedSlotId(slot.id)}
-                            className={cn(
-                                "p-3 rounded-lg border text-left transition-all",
-                                selectedSlotId === slot.id 
-                                    ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" 
-                                    : "border-gray-200 hover:border-blue-300 hover:bg-gray-50",
-                                isDisabled && "opacity-50 cursor-not-allowed bg-gray-50"
-                            )}
-                        >
-                            <div className={cn("text-sm font-semibold", isExpired ? "text-red-500" : "text-gray-900")}>
-                                {slot.time}
-                            </div>
-                            <div className="flex justify-between items-center mt-1">
-                                <span className={cn("text-xs", isExpired ? "text-red-400" : "text-gray-500")}>
-                                    {slot.mealType}
-                                </span>
-                                <span className={cn(
-                                    "text-[10px] font-medium px-1.5 py-0.5 rounded", 
-                                    isExpired ? "bg-red-100 text-red-700" :
-                                    isSlotFull ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
-                                )}>
-                                    {isExpired ? "EXPIRED" : isSlotFull ? "FULL" : `${slot.capacity - slot.booked} left`}
-                                </span>
-                            </div>
-                        </button>
-                     );
-                 })}
-             </div>
-         )}
+              // Allow 15 min buffer? No, simple expiry for now as per request
+              const isExpired = now > slotTime;
+              const isSlotFull = slot.booked >= slot.capacity;
+              const isDisabled = isSlotFull || isExpired;
+
+              return (
+                <button
+                  key={slot.id}
+                  disabled={isDisabled}
+                  onClick={() => setSelectedSlotId(slot.id)}
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-all",
+                    selectedSlotId === slot.id
+                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500"
+                      : "border-gray-200 hover:border-blue-300 hover:bg-gray-50",
+                    isDisabled && "opacity-50 cursor-not-allowed bg-gray-50",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "text-sm font-semibold",
+                      isExpired ? "text-red-500" : "text-gray-900",
+                    )}
+                  >
+                    {slot.time}
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span
+                      className={cn(
+                        "text-xs",
+                        isExpired ? "text-red-400" : "text-gray-500",
+                      )}
+                    >
+                      {slot.mealType}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium px-1.5 py-0.5 rounded",
+                        isExpired
+                          ? "bg-red-100 text-red-700"
+                          : isSlotFull
+                            ? "bg-red-100 text-red-700"
+                            : "bg-green-100 text-green-700",
+                      )}
+                    >
+                      {isExpired
+                        ? "EXPIRED"
+                        : isSlotFull
+                          ? "FULL"
+                          : `${slot.capacity - slot.booked} left`}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">

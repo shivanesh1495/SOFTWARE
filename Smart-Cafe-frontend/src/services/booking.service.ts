@@ -42,6 +42,31 @@ export interface Booking {
 const parseSlotTimeRange = (
   time?: string,
 ): { startTime: string; endTime: string } => {
+  const to12Hour = (value: string): string => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+
+    const ampmMatch = text.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+    if (ampmMatch) {
+      const hours = Number(ampmMatch[1]);
+      const minutes = ampmMatch[2];
+      const period = ampmMatch[3].toUpperCase();
+      if (hours >= 1 && hours <= 12) {
+        return `${String(hours).padStart(2, "0")}:${minutes} ${period}`;
+      }
+      return text;
+    }
+
+    const hhmmMatch = text.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!hhmmMatch) return text;
+
+    const hours24 = Number(hhmmMatch[1]);
+    const minutes = hhmmMatch[2];
+    const period = hours24 >= 12 ? "PM" : "AM";
+    const hours12 = hours24 % 12 || 12;
+    return `${String(hours12).padStart(2, "0")}:${minutes} ${period}`;
+  };
+
   if (!time) {
     return { startTime: "", endTime: "" };
   }
@@ -53,25 +78,38 @@ const parseSlotTimeRange = (
         ? "—"
         : "";
   if (!delimiter) {
-    return { startTime: time, endTime: "" };
+    return { startTime: to12Hour(time), endTime: "" };
   }
   const parts = time
     .split(delimiter)
     .map((part) => part.trim())
     .filter(Boolean);
   return {
-    startTime: parts[0] || time,
-    endTime: parts[1] || "",
+    startTime: to12Hour(parts[0] || time),
+    endTime: to12Hour(parts[1] || ""),
   };
 };
 
 const normalizeSlot = (slot: any): Slot => {
   if (!slot) return slot;
   const { startTime, endTime } = parseSlotTimeRange(slot.time);
+
+  const normalizePart = (value?: string) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const hhmm = text.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!hhmm) return text;
+    const h24 = Number(hhmm[1]);
+    const mm = hhmm[2];
+    const period = h24 >= 12 ? "PM" : "AM";
+    const h12 = h24 % 12 || 12;
+    return `${String(h12).padStart(2, "0")}:${mm} ${period}`;
+  };
+
   return {
     ...slot,
-    startTime: slot.startTime || startTime,
-    endTime: slot.endTime || endTime,
+    startTime: normalizePart(slot.startTime) || startTime,
+    endTime: normalizePart(slot.endTime) || endTime,
   } as Slot;
 };
 
@@ -120,6 +158,7 @@ export const getSlots = async (params?: {
   mealType?: string;
   status?: string;
   canteenId?: string;
+  limit?: number;
 }): Promise<Slot[]> => {
   const response = await api.get("/slots", { params });
   const slots =
@@ -413,4 +452,56 @@ export const replaceBookingItems = async (
 ): Promise<Booking> => {
   const response = await api.patch(`/bookings/${bookingId}/items`, data);
   return normalizeBooking(response.data.data);
+};
+
+/**
+ * Generate secure QR token for a booking
+ */
+export const generateQRToken = async (bookingId: string): Promise<string> => {
+  const response = await api.get(`/bookings/${bookingId}/qr-token`);
+  return response.data.data.qrToken;
+};
+
+/**
+ * Verify QR token (Staff only)
+ */
+export interface QRVerification {
+  decoded: {
+    type: string;
+    v: number;
+    bookingId: string;
+    tokenNumber: string;
+    userId?: string;
+    userName: string;
+    userEmail?: string;
+    slotTime: string;
+    slotDate: string;
+    slotStartTime?: string;
+    slotEndTime?: string;
+    totalAmount: number;
+    items: Array<{
+      name: string;
+      quantity: number;
+      price: number;
+      portionSize?: string;
+    }>;
+    status: string;
+    expiryAt?: string;
+    canteenName?: string;
+    createdAt: string;
+    generatedAt: string;
+  };
+  validation: {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  };
+  currentBooking: Booking | null;
+}
+
+export const verifyQRToken = async (
+  qrToken: string,
+): Promise<QRVerification> => {
+  const response = await api.post("/bookings/verify-qr", { qrToken });
+  return response.data.data;
 };

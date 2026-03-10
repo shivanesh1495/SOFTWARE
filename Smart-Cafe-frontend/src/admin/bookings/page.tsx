@@ -72,6 +72,7 @@ const AdminBookings: React.FC = () => {
       const data = await getSlots({
         date: selectedDate,
         canteenId: selectedCanteenId || undefined,
+        limit: 200,
       });
       setSlots(data);
     } catch {
@@ -85,6 +86,7 @@ const AdminBookings: React.FC = () => {
       const data = await getSlots({
         date: selectedDate,
         canteenId: selectedCanteenId || undefined,
+        limit: 200,
       });
       setSlots(data);
       // Refresh selected slot if it exists

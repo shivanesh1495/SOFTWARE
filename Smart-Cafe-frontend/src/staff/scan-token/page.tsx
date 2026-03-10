@@ -11,16 +11,14 @@ import {
   Shuffle,
   Plus,
   Trash2,
+  AlertTriangle,
+  Shield,
 } from "lucide-react";
 import * as bookingService from "../../services/booking.service";
 import type { Booking } from "../../services/booking.service";
 import * as menuService from "../../services/menu.service";
 import type { MenuItem } from "../../services/menu.service";
 import toast from "react-hot-toast";
-import {
-  decodeTokenPayload,
-  type TokenPayload,
-} from "../../utils/tokenPayload";
 import { getPublicSettings } from "../../services/system.service";
 
 interface EditableBookingItem {
@@ -29,15 +27,28 @@ interface EditableBookingItem {
   portionSize: "Regular" | "Small";
 }
 
+interface QRPayload {
+  bookingId?: string;
+  tokenNumber?: string;
+  userName?: string;
+  slotTime?: string;
+  totalAmount?: number;
+  items?: Array<{ name: string; quantity: number; price: number }>;
+  canteenName?: string;
+}
+
 const StaffScanToken: React.FC = () => {
   const [tokenInput, setTokenInput] = useState("");
   const [scanning, setScanning] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [scanResult, setScanResult] = useState<
-    "success" | "invalid" | "expired" | null
+    "success" | "invalid" | "expired" | "tampered" | null
   >(null);
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [payload, setPayload] = useState<TokenPayload | null>(null);
+  const [payload, setPayload] = useState<QRPayload | null>(null);
+  const [verificationWarnings, setVerificationWarnings] = useState<string[]>(
+    [],
+  );
   const [confirming, setConfirming] = useState(false);
   const [onlineBookingEnabled, setOnlineBookingEnabled] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -61,29 +72,102 @@ const StaffScanToken: React.FC = () => {
 
   const handleLookup = async () => {
     if (!tokenInput.trim()) return;
-    const decoded = decodeTokenPayload(tokenInput.trim());
-    if (decoded) {
-      setScanResult("success");
-      setBooking(null);
-      setPayload(decoded);
-      return;
-    }
+
     try {
       setLookingUp(true);
       setScanResult(null);
       setBooking(null);
       setPayload(null);
-      const result = await bookingService.getBookingByToken(tokenInput.trim());
-      setBooking(result);
-      if (result.status === "confirmed" || result.status === "pending") {
-        setScanResult("success");
-      } else if (
-        result.status === "completed" ||
-        result.status === "cancelled"
-      ) {
-        setScanResult("expired");
+      setVerificationWarnings([]);
+
+      // Check if input looks like a JWT token (contains dots)
+      const isJWT = tokenInput.trim().includes(".");
+
+      if (isJWT) {
+        // Verify JWT token with backend
+        try {
+          const verificationResult = await bookingService.verifyQRToken(
+            tokenInput.trim(),
+          );
+
+          // Check validation result
+          if (!verificationResult.validation.isValid) {
+            // Token is invalid or expired
+            if (
+              verificationResult.validation.errors.some(
+                (e) =>
+                  e.toLowerCase().includes("expired") ||
+                  e.toLowerCase().includes("completed"),
+              )
+            ) {
+              setScanResult("expired");
+            } else {
+              setScanResult("invalid");
+            }
+            toast.error(
+              verificationResult.validation.errors[0] ||
+                "Token validation failed",
+            );
+            return;
+          }
+
+          // Set warnings if any
+          if (verificationResult.validation.warnings.length > 0) {
+            setVerificationWarnings(verificationResult.validation.warnings);
+          }
+
+          // Token is valid - extract booking info
+          setPayload({
+            bookingId: verificationResult.decoded.bookingId,
+            tokenNumber: verificationResult.decoded.tokenNumber,
+            userName: verificationResult.decoded.userName,
+            slotTime: verificationResult.decoded.slotTime,
+            totalAmount: verificationResult.decoded.totalAmount,
+            items: verificationResult.decoded.items,
+            canteenName: verificationResult.decoded.canteenName,
+          });
+
+          // If current booking is available, use it
+          if (verificationResult.currentBooking) {
+            setBooking(verificationResult.currentBooking as Booking);
+          }
+
+          setScanResult("success");
+          toast.success("✓ QR Code verified - Authentic & unaltered", {
+            duration: 3000,
+          });
+        } catch (error: any) {
+          const errorMsg = error?.response?.data?.message || "";
+          if (errorMsg.includes("tampered") || errorMsg.includes("Invalid")) {
+            setScanResult("tampered");
+            toast.error("⚠️ QR Code has been tampered with!", {
+              duration: 4000,
+            });
+          } else if (errorMsg.includes("expired")) {
+            setScanResult("expired");
+            toast.error(errorMsg);
+          } else {
+            setScanResult("invalid");
+            toast.error(errorMsg || "Failed to verify QR token");
+          }
+          return;
+        }
       } else {
-        setScanResult("invalid");
+        // Legacy: Try token number lookup
+        const result = await bookingService.getBookingByToken(
+          tokenInput.trim(),
+        );
+        setBooking(result);
+        if (result.status === "confirmed" || result.status === "pending") {
+          setScanResult("success");
+        } else if (
+          result.status === "completed" ||
+          result.status === "cancelled"
+        ) {
+          setScanResult("expired");
+        } else {
+          setScanResult("invalid");
+        }
       }
     } catch (error: any) {
       const message = error?.response?.data?.message || "";
@@ -114,6 +198,7 @@ const StaffScanToken: React.FC = () => {
       setScanResult(null);
       setBooking(null);
       setPayload(null);
+      setVerificationWarnings([]);
       setTokenInput("");
     } catch (error) {
       console.error("Failed to confirm entry:", error);
@@ -404,14 +489,35 @@ const StaffScanToken: React.FC = () => {
           {scanResult === "success" && payload && (
             <div className="bg-green-50 border border-green-100 rounded-xl p-6 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex items-center gap-3 mb-4">
-                <CheckCircle className="text-green-600" size={32} />
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="text-green-600" size={32} />
+                  <Shield className="text-green-600" size={24} />
+                </div>
                 <div>
                   <h3 className="text-lg font-bold text-green-900">
-                    Valid Token
+                    Valid Token - Verified
                   </h3>
-                  <p className="text-green-700 text-sm">Entry Authorized</p>
+                  <p className="text-green-700 text-sm">
+                    ✓ Authentic & Unaltered
+                  </p>
                 </div>
               </div>
+
+              {verificationWarnings.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle
+                      className="text-yellow-600 shrink-0 mt-0.5"
+                      size={16}
+                    />
+                    <div className="text-xs text-yellow-800">
+                      {verificationWarnings.map((warning, idx) => (
+                        <div key={idx}>• {warning}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-lg p-4 border border-green-100 space-y-3">
                 <div className="flex justify-between border-b border-gray-100 pb-2">
@@ -422,9 +528,11 @@ const StaffScanToken: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 text-sm flex items-center gap-1">
-                    <User size={14} /> Student
+                    <User size={14} /> Student Name
                   </span>
-                  <span className="font-medium text-gray-900">Student</span>
+                  <span className="font-medium text-gray-900">
+                    {payload.userName || "Student"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 text-sm flex items-center gap-1">
@@ -435,12 +543,40 @@ const StaffScanToken: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-500 text-sm">Status</span>
-                  <span className="font-medium text-gray-900 capitalize">
-                    {payload.status || "confirmed"}
+                  <span className="text-gray-500 text-sm">Total Amount</span>
+                  <span className="font-medium text-gray-900">
+                    ₹{payload.totalAmount || 0}
                   </span>
                 </div>
+                {payload.canteenName && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 text-sm">Canteen</span>
+                    <span className="font-medium text-gray-900">
+                      {payload.canteenName}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {payload.items && payload.items.length > 0 && (
+                <div className="mt-4 bg-white rounded-lg p-4 border border-green-100">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                    Order Items:
+                  </h4>
+                  <div className="space-y-2">
+                    {payload.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          {item.name} × {item.quantity}
+                        </span>
+                        <span className="text-gray-900 font-medium">
+                          ₹{item.price * item.quantity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <Button
                 className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white border-transparent"
@@ -448,6 +584,52 @@ const StaffScanToken: React.FC = () => {
                 isLoading={confirming}
               >
                 Confirm Entry & Complete
+              </Button>
+            </div>
+          )}
+
+          {scanResult === "tampered" && (
+            <div className="bg-red-50 border-2 border-red-400 rounded-xl p-6 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-red-100 p-2 rounded-full">
+                  <AlertTriangle className="text-red-600" size={32} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-900">
+                    ⚠️ TAMPERED QR CODE
+                  </h3>
+                  <p className="text-red-700 text-sm font-semibold">
+                    Security Alert - DO NOT ACCEPT
+                  </p>
+                </div>
+              </div>
+              <div className="bg-white border-2 border-red-300 rounded-lg p-4 mb-4">
+                <p className="text-red-800 font-medium mb-2">
+                  This QR code has been tampered with or forged.
+                </p>
+                <ul className="text-sm text-red-700 space-y-1 list-disc list-inside">
+                  <li>The digital signature is invalid</li>
+                  <li>The data may have been altered</li>
+                  <li>This is NOT an authentic booking</li>
+                </ul>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-4">
+                <p className="text-sm text-yellow-900 font-medium">
+                  <strong>Action Required:</strong> Report this incident to
+                  management immediately.
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                className="w-full"
+                onClick={() => {
+                  setScanResult(null);
+                  setBooking(null);
+                  setPayload(null);
+                  setTokenInput("");
+                }}
+              >
+                Dismiss Alert
               </Button>
             </div>
           )}

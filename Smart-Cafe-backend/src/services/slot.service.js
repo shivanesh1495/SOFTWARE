@@ -8,6 +8,60 @@ const ApiError = require("../utils/ApiError");
 
 const SLOT_CREATION_BUFFER_MINUTES = 10;
 
+const formatTo12Hour = (timeText) => {
+  if (!timeText) return "";
+  const raw = String(timeText).trim().toUpperCase();
+
+  const ampmMatch = raw.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2];
+    const period = ampmMatch[3].toUpperCase();
+
+    if (hours < 1 || hours > 12) return raw;
+    hours = hours % 12 || 12;
+
+    return `${String(hours).padStart(2, "0")}:${minutes} ${period}`;
+  }
+
+  const hhmmMatch = raw.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!hhmmMatch) return raw;
+
+  const hours24 = parseInt(hhmmMatch[1], 10);
+  const minutes = hhmmMatch[2];
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+
+  return `${String(hours12).padStart(2, "0")}:${minutes} ${period}`;
+};
+
+const normalizeSlotTimeRange = (timeValue) => {
+  if (!timeValue) return timeValue;
+
+  const text = String(timeValue).trim();
+  const delimiter = text.includes("-")
+    ? "-"
+    : text.includes("–")
+      ? "–"
+      : text.includes("—")
+        ? "—"
+        : "";
+
+  if (!delimiter) {
+    return formatTo12Hour(text);
+  }
+
+  const parts = text
+    .split(delimiter)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const start = formatTo12Hour(parts[0] || "");
+  const end = formatTo12Hour(parts[1] || "");
+
+  return end ? `${start} - ${end}` : start;
+};
+
 const parseSlotDateTime = (dateValue, timeValue) => {
   if (!dateValue || !timeValue) return null;
 
@@ -120,7 +174,10 @@ const getSlotById = async (id) => {
  * Create new slot
  */
 const createSlot = async (data) => {
-  const slotDateTime = parseSlotDateTime(data.date, data.time);
+  const normalizedTime = normalizeSlotTimeRange(data.time);
+  const slotData = { ...data, time: normalizedTime };
+
+  const slotDateTime = parseSlotDateTime(slotData.date, slotData.time);
   if (slotDateTime) {
     const now = new Date();
     const minTime = new Date(
@@ -178,7 +235,7 @@ const createSlot = async (data) => {
               slotTimeMinutes >= closeTimeMinutes
             ) {
               throw ApiError.badRequest(
-                `Slot time ${data.time} is outside operating hours (${dayConfig.openTime} - ${dayConfig.closeTime})`,
+                `Slot time ${slotData.time} is outside operating hours (${dayConfig.openTime} - ${dayConfig.closeTime})`,
               );
             }
           }
@@ -191,7 +248,7 @@ const createSlot = async (data) => {
     }
   }
 
-  const slot = await Slot.create(data);
+  const slot = await Slot.create(slotData);
   return slot;
 };
 
@@ -199,7 +256,12 @@ const createSlot = async (data) => {
  * Update slot
  */
 const updateSlot = async (id, data) => {
-  const slot = await Slot.findByIdAndUpdate(id, data, {
+  const payload = { ...data };
+  if (payload.time) {
+    payload.time = normalizeSlotTimeRange(payload.time);
+  }
+
+  const slot = await Slot.findByIdAndUpdate(id, payload, {
     new: true,
     runValidators: true,
   });

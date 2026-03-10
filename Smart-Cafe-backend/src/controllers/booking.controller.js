@@ -195,6 +195,27 @@ const getTokenStatus = catchAsync(async (req, res) => {
   ApiResponse.ok(res, "Token status retrieved", result);
 });
 
+/**
+ * Generate secure QR token for a booking
+ * GET /api/bookings/:id/qr-token
+ */
+const generateQRToken = catchAsync(async (req, res) => {
+  const qrToken = await bookingService.generateBookingQRToken(
+    req.params.id,
+    req.userId,
+  );
+  ApiResponse.ok(res, "QR token generated", { qrToken });
+});
+
+/**
+ * Verify QR token (staff only)
+ * POST /api/bookings/verify-qr
+ */
+const verifyQRToken = catchAsync(async (req, res) => {
+  const result = await bookingService.verifyBookingQRToken(req.body.qrToken);
+  ApiResponse.ok(res, "QR token verified", result);
+});
+
 module.exports = {
   getMyBookings,
   getAllBookings,
@@ -212,4 +233,6 @@ module.exports = {
   rescheduleBooking,
   replaceBookingItems,
   getTokenStatus,
+  generateQRToken,
+  verifyQRToken,
 };

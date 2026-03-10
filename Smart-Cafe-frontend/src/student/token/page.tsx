@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Button from "../../components/common/Button";
 import {
@@ -9,12 +9,12 @@ import {
   Clock,
   Calendar,
   ShoppingBag,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import QRCodeLib from "qrcode";
-import {
-  encodeTokenPayload,
-  type TokenPayload,
-} from "../../utils/tokenPayload";
+import { generateQRToken } from "../../services/booking.service";
+import toast from "react-hot-toast";
 
 const StudentToken: React.FC = () => {
   const navigate = useNavigate();
@@ -37,65 +37,70 @@ const StudentToken: React.FC = () => {
   const totalAmount = state?.totalAmount || 0;
   const bookingId = state?.bookingId || "";
   const items = state?.items || [];
-  const expiryAt = state?.expiryAt || "";
   const date = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
 
-  const payload = useMemo<TokenPayload>(
-    () => ({
-      v: 1,
-      bookingId,
-      tokenNumber,
-      slotTime,
-      slotDate,
-      totalAmount,
-      status: state?.status,
-      expiryAt: expiryAt || undefined,
-      items: items.map((item, idx) => ({
-        name:
-          item.menuItem?.itemName || item.menuItem?.name || `Item ${idx + 1}`,
-        quantity: item.quantity || 1,
-        price: item.price || 0,
-      })),
-    }),
-    [
-      bookingId,
-      tokenNumber,
-      slotTime,
-      slotDate,
-      totalAmount,
-      items,
-      state?.status,
-      expiryAt,
-    ],
-  );
-
-  const encodedPayload = useMemo(() => encodeTokenPayload(payload), [payload]);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [loadingQR, setLoadingQR] = useState(false);
+  const [qrError, setQrError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
-    QRCodeLib.toDataURL(encodedPayload, {
-      margin: 1,
-      width: 180,
-      color: {
-        dark: "#111827",
-        light: "#FFFFFF",
-      },
-    })
-      .then((url) => {
-        if (isMounted) setQrDataUrl(url);
-      })
-      .catch(() => {
-        if (isMounted) setQrDataUrl("");
-      });
+
+    const fetchAndGenerateQR = async () => {
+      if (!bookingId) {
+        setQrError("Booking ID is missing");
+        return;
+      }
+
+      setLoadingQR(true);
+      setQrError("");
+
+      try {
+        // Fetch secure JWT token from backend
+        const secureToken = await generateQRToken(bookingId);
+
+        if (!isMounted) return;
+
+        // Generate QR code from the secure JWT token
+        const url = await QRCodeLib.toDataURL(secureToken, {
+          margin: 1,
+          width: 200,
+          errorCorrectionLevel: "H", // High error correction for better scanning
+          color: {
+            dark: "#111827",
+            light: "#FFFFFF",
+          },
+        });
+
+        if (isMounted) {
+          setQrDataUrl(url);
+        }
+      } catch (error: any) {
+        console.error("Failed to generate QR code:", error);
+        if (isMounted) {
+          const errorMsg =
+            error?.response?.data?.message ||
+            "Failed to generate secure QR code";
+          setQrError(errorMsg);
+          toast.error(errorMsg);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingQR(false);
+        }
+      }
+    };
+
+    fetchAndGenerateQR();
+
     return () => {
       isMounted = false;
     };
-  }, [encodedPayload]);
+  }, [bookingId]);
 
   return (
     <div className="pb-24 min-h-screen bg-gray-50 p-6 flex flex-col items-center justify-center text-center">
@@ -118,7 +123,18 @@ const StudentToken: React.FC = () => {
         <div className="border-t border-b border-gray-100 py-6 space-y-4">
           {/* QR Code */}
           <div className="bg-white p-4 rounded-2xl inline-flex shadow-lg border border-gray-100">
-            {qrDataUrl ? (
+            {loadingQR ? (
+              <div className="w-40 h-40 flex items-center justify-center">
+                <Loader2 className="animate-spin text-brand" size={40} />
+              </div>
+            ) : qrError ? (
+              <div className="w-40 h-40 flex flex-col items-center justify-center bg-red-50 rounded-xl p-2">
+                <AlertCircle className="text-red-500 mb-2" size={32} />
+                <span className="text-xs text-red-700 text-center">
+                  Failed to load QR
+                </span>
+              </div>
+            ) : qrDataUrl ? (
               <img src={qrDataUrl} alt="Token QR" className="w-40 h-40" />
             ) : (
               <div className="w-40 h-40 bg-gray-900 text-white flex items-center justify-center rounded-xl">
@@ -126,7 +142,9 @@ const StudentToken: React.FC = () => {
               </div>
             )}
           </div>
-          <p className="text-xs font-mono text-gray-400">Scan at Counter</p>
+          <p className="text-xs font-mono text-gray-400">
+            {loadingQR ? "Generating secure QR Code..." : "Scan at Counter"}
+          </p>
 
           {bookingId && (
             <div className="bg-gray-50 rounded-xl p-3 text-sm font-medium text-gray-700">

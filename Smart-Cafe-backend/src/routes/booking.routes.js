@@ -16,6 +16,7 @@ router.use(authenticate);
 // User routes
 router.get("/my", bookingController.getMyBookings);
 router.get("/queue-info/:slotId", bookingController.getQueueInfo);
+router.get("/:id/qr-token", bookingController.generateQRToken); // Generate secure QR token
 router.post(
   "/",
   validate(bookingValidation.createBooking),
@@ -29,6 +30,7 @@ router.post(
 router.put("/:id/reschedule", bookingController.rescheduleBooking);
 
 // Staff routes
+router.post("/verify-qr", isStaff, bookingController.verifyQRToken); // Verify QR token
 router.get("/token/:tokenNumber", isStaff, bookingController.getBookingByToken);
 router.get("/token-status/:tokenNumber", bookingController.getTokenStatus);
 router.get("/scans", isStaff, bookingController.getScanHistory);
