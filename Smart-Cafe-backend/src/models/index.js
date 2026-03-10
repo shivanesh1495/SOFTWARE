@@ -17,6 +17,8 @@ const StockItem = require("./StockItem");
 const StockTransaction = require("./StockTransaction");
 const Feedback = require("./Feedback");
 const FinancialTransaction = require("./FinancialTransaction");
+const BackupSnapshot = require("./BackupSnapshot");
+const BackupSnapshotChunk = require("./BackupSnapshotChunk");
 
 module.exports = {
   User,
@@ -38,4 +40,6 @@ module.exports = {
   StockTransaction,
   Feedback,
   FinancialTransaction,
+  BackupSnapshot,
+  BackupSnapshotChunk,
 };

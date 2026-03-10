@@ -1,8 +1,9 @@
-const fs = require("fs/promises");
-const path = require("path");
 const models = require("../models");
-
-const BACKUP_DIR = path.join(__dirname, "..", "..", "backups");
+const CHUNK_SIZE = Math.max(
+  50,
+  parseInt(process.env.BACKUP_CHUNK_SIZE, 10) || 200,
+);
+const EXCLUDED_MODEL_NAMES = new Set(["BackupSnapshot", "BackupSnapshotChunk"]);
 
 const getTimestamp = () => {
   const now = new Date();
@@ -10,31 +11,72 @@ const getTimestamp = () => {
 };
 
 const runBackup = async (meta = {}) => {
-  await fs.mkdir(BACKUP_DIR, { recursive: true });
+  const { BackupSnapshot, BackupSnapshotChunk } = models;
 
   const timestamp = getTimestamp();
-  const fileName = `backup-${timestamp}.json`;
-  const filePath = path.join(BACKUP_DIR, fileName);
+  const backupId = `backup-${timestamp}`;
+  const fileName = `${backupId}.mongodb`;
 
-  const data = {};
+  const collectionStats = [];
+  let totalDocuments = 0;
+  let totalChunks = 0;
+
   for (const model of Object.values(models)) {
-    if (model && typeof model.find === "function" && model.modelName) {
-      data[model.modelName] = await model.find({}).lean();
+    if (!model || typeof model.find !== "function" || !model.modelName) {
+      continue;
     }
+
+    if (EXCLUDED_MODEL_NAMES.has(model.modelName)) {
+      continue;
+    }
+
+    const docs = await model.find({}).lean();
+    const documentCount = docs.length;
+    let chunkCount = 0;
+
+    if (documentCount > 0) {
+      const chunkRecords = [];
+      for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const chunkDocs = docs.slice(i, i + CHUNK_SIZE);
+        chunkRecords.push({
+          backupId,
+          collectionName: model.modelName,
+          chunkIndex: chunkCount,
+          documentCount: chunkDocs.length,
+          documents: chunkDocs,
+        });
+        chunkCount += 1;
+      }
+
+      await BackupSnapshotChunk.insertMany(chunkRecords, { ordered: true });
+    }
+
+    totalDocuments += documentCount;
+    totalChunks += chunkCount;
+    collectionStats.push({
+      name: model.modelName,
+      documentCount,
+      chunkCount,
+    });
   }
 
-  const payload = {
-    createdAt: new Date().toISOString(),
+  await BackupSnapshot.create({
+    backupId,
+    fileName,
+    storage: "mongodb",
     meta,
-    data,
-  };
-
-  await fs.writeFile(filePath, JSON.stringify(payload, null, 2), "utf-8");
+    collections: collectionStats,
+    totalDocuments,
+    totalChunks,
+  });
 
   return {
+    backupId,
     fileName,
-    filePath,
-    collections: Object.keys(data),
+    storage: "mongodb",
+    collections: collectionStats.map((entry) => entry.name),
+    totalDocuments,
+    totalChunks,
   };
 };
 
