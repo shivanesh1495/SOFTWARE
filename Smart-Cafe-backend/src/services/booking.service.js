@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const { Booking, Slot, MenuItem, SystemSetting, User } = require("../models");
 const {
   parsePagination,
@@ -776,7 +777,7 @@ const completeBooking = async (id, staffUserId, cashCollected = 0) => {
       cashCollected,
       `Cash collected for token ${booking.tokenNumber}`,
       booking.slot ? booking.slot.canteenId : null,
-      staffUserId
+      staffUserId,
     );
   }
 
@@ -810,6 +811,19 @@ const getBookingStats = async (date, canteenId) => {
 
   // If canteenId is provided, lookup slot and filter by canteenId
   if (canteenId) {
+    const canteenFilter = mongoose.Types.ObjectId.isValid(String(canteenId))
+      ? {
+          $or: [
+            { "slotData.canteenId": String(canteenId) },
+            {
+              "slotData.canteenId": new mongoose.Types.ObjectId(
+                String(canteenId),
+              ),
+            },
+          ],
+        }
+      : { "slotData.canteenId": String(canteenId) };
+
     pipeline.push(
       {
         $lookup: {
@@ -821,9 +835,7 @@ const getBookingStats = async (date, canteenId) => {
       },
       { $unwind: "$slotData" },
       {
-        $match: {
-          "slotData.canteenId": canteenId,
-        },
+        $match: canteenFilter,
       },
     );
   }
@@ -889,9 +901,14 @@ const createWalkinBooking = async (data, staffUserId) => {
 
   if (staffUserId) {
     const staffUser = await User.findById(staffUserId);
-    if (staffUser && !['admin', 'manager'].includes(staffUser.role)) {
-      if (slot.canteenId && slot.canteenId.toString() !== staffUser.canteenId?.toString()) {
-        throw ApiError.forbidden("Not authorized: Cannot create walk-in for a different canteen.");
+    if (staffUser && !["admin", "manager"].includes(staffUser.role)) {
+      if (
+        slot.canteenId &&
+        slot.canteenId.toString() !== staffUser.canteenId?.toString()
+      ) {
+        throw ApiError.forbidden(
+          "Not authorized: Cannot create walk-in for a different canteen.",
+        );
       }
     }
   }
@@ -964,7 +981,7 @@ const createWalkinBooking = async (data, staffUserId) => {
         data.cashCollected,
         `Cash collected for walk-in token ${booking.tokenNumber}`,
         slot.canteenId,
-        staffUserId
+        staffUserId,
       );
     }
 
@@ -1522,9 +1539,16 @@ const verifyBookingQRToken = async (qrToken, staffUserId) => {
   if (currentBooking) {
     if (staffUserId) {
       const staffUser = await User.findById(staffUserId);
-      if (staffUser && !['admin', 'manager'].includes(staffUser.role)) {
-        if (currentBooking.slot && currentBooking.slot.canteenId && currentBooking.slot.canteenId.toString() !== staffUser.canteenId?.toString()) {
-          throw ApiError.forbidden("Not authorized: Booking belongs to a different canteen.");
+      if (staffUser && !["admin", "manager"].includes(staffUser.role)) {
+        if (
+          currentBooking.slot &&
+          currentBooking.slot.canteenId &&
+          currentBooking.slot.canteenId.toString() !==
+            staffUser.canteenId?.toString()
+        ) {
+          throw ApiError.forbidden(
+            "Not authorized: Booking belongs to a different canteen.",
+          );
         }
       }
     }

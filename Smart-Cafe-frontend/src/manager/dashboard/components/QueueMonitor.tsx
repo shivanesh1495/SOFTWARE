@@ -15,6 +15,7 @@ import {
   getSetting,
   updateSettingValue,
 } from "../../../services/system.service";
+import { useRealtimeRefresh } from "../../../hooks/useRealtimeRefresh";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -86,6 +87,16 @@ const QueueMonitor: React.FC<Props> = ({ canteenId }) => {
     const interval = setInterval(loadData, 15000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  useRealtimeRefresh(["booking:updated"], (_eventName, payload: any) => {
+    const eventCanteenId = String(
+      payload?.canteenId || payload?.booking?.slot?.canteenId || "",
+    );
+
+    if (!canteenId || !eventCanteenId || eventCanteenId === String(canteenId)) {
+      loadData();
+    }
+  });
 
   const handleToggleQueue = async () => {
     const next = !isQueueActive;
